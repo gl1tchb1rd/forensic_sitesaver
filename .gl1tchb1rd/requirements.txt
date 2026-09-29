@@ -1,7 +1,0 @@
-playwright>=1.60,<2
-beautifulsoup4>=4.13,<5
-dnspython>=2.7,<3
-requests>=2.32,<3
-pyOpenSSL>=25,<27
-cryptography>=45,<51
-reportlab>=4.4,<6
