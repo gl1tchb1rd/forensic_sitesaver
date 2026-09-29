@@ -1,0 +1,23 @@
+{
+  "product": "gl1tchb1rd forensic sitesaver",
+  "version": "1.0.0",
+  "files": {
+    ".gl1tchb1rd/CHANGELOG.md": "c992f25ee1ac297e6eee9fcd6978ee6ede86fa403361e35f876c461364505b4c",
+    ".gl1tchb1rd/LICENSE_GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    ".gl1tchb1rd/LIZENZEN_UND_DRITTANBIETER.txt": "547c481a3a4e64cddeb898e2cc420bf5e8fd61145325693563f894b3850a39df",
+    ".gl1tchb1rd/__init__.py": "c95de70a3795856e157c2a81c87a6fae3b5f7a324c28d211f2840e92253eeff8",
+    ".gl1tchb1rd/capture.py": "0845d24ebff1cb48000eda9ad609bf0196abe9ec3a74108f2b66800bfc4e2fff",
+    ".gl1tchb1rd/cli.py": "42737f28b0e7c816fc7fd4fc42ec23d219844a107d07561a451d387efd1cb691",
+    ".gl1tchb1rd/common.py": "6c4b211b3a6c0c8961bd1880ccfc251fd30370872470e372ef32b884195568af",
+    ".gl1tchb1rd/domain_analysis.py": "adb85a78c4a928cfb4f1ee59c5995e3e40e55811ab624220434e59fcdae12df2",
+    ".gl1tchb1rd/gui.py": "c3a3e3391437352e07844a3cc745192e9f2d792e9e4422072bea64d6f1c89827",
+    ".gl1tchb1rd/har_analysis.py": "12f493be2a8ca7bfe5bcfde9e01c688ea6ac261f29bc41871eae3ccd3b09c801",
+    ".gl1tchb1rd/license_tools.py": "7e8630587cbbe7139a277dfb18086b26fc40548252325fe2efb2d6579d8d91d5",
+    ".gl1tchb1rd/reports.py": "3c8b75e5e782972d0a70e9121913ad3745f9f74afbb935fcaae928f7f9ebda43",
+    ".gl1tchb1rd/requirements.txt": "1d452fd4d544975d6ac95ea0449ed2e4a12238f6ad9c30b14f981b3b02c490ec",
+    ".gl1tchb1rd/tls_capture.py": "3b5a7338aab600891254954618807abeaee010e45dbf94ed45aca597ff058614",
+    ".gl1tchb1rd/updater.py": "f8d4eb4cb21a311919e94efb675fa2135c525ab6f683c8e9fc9f5f08865086f4",
+    "README.md": "8d8de0327a050fd1a6f9d60b46dd741eefd9dba5ecc0187130d1a3a43898bde8",
+    "gl1tchb1rd_forensic_sitesaver.py": "b92a6bdcd4e90ec11a30a6f17c930119940ddc368f01c06a3da1f0decfb438ba"
+  }
+}
