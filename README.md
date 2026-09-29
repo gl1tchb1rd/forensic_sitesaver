@@ -1,27 +1,29 @@
-# gl1tchb1rd forensic sitesaver 1.0.0
+# Forensic SiteSaver 1.0.0
 
-`gl1tchb1rd forensic sitesaver` ist ein plattformübergreifendes Python-Werkzeug zur passiven technischen Sicherung und Auswertung öffentlich erreichbarer Websites und Domains. Die Software richtet sich insbesondere an forensische bzw. ermittlungsunterstützende Arbeitsabläufe, ist aber nicht auf Behördennutzung beschränkt.
+`Forensic SiteSaver` ist ein plattformübergreifendes Python-Werkzeug zur passiven technischen Sicherung und Auswertung öffentlich erreichbarer Websites und Domains. Die Software richtet sich insbesondere an forensische bzw. ermittlungsunterstützende Arbeitsabläufe, ist aber nicht auf Behördennutzung beschränkt.
+
+Projekt / Quellcode: https://github.com/gl1tchb1rd/forensic_sitesaver
 
 ## Start
 
 Auf der obersten Ebene liegen bewusst nur diese README und die Startdatei:
 
 ```text
-gl1tchb1rd_forensic_sitesaver.py
+forensic_sitesaver.py
 README.md
-.gl1tchb1rd/   (technische Komponenten; unter Linux verborgen)
+.forensic_sitesaver/   (technische Komponenten; unter Linux verborgen)
 ```
 
-Windows: `gl1tchb1rd_forensic_sitesaver.py` starten oder in einer Eingabeaufforderung:
+Windows: `forensic_sitesaver.py` starten oder in einer Eingabeaufforderung:
 
 ```bat
-python gl1tchb1rd_forensic_sitesaver.py
+python forensic_sitesaver.py
 ```
 
 Linux/macOS:
 
 ```bash
-python3 gl1tchb1rd_forensic_sitesaver.py
+python3 forensic_sitesaver.py
 ```
 
 Beim ersten Start wird im technischen Unterordner eine lokale `.venv` angelegt. Python-Abhängigkeiten sowie Chromium und Firefox werden von ihren jeweiligen Quellen installiert. Python 3.10+ und Tk/Tkinter müssen systemseitig vorhanden sein.
@@ -63,14 +65,14 @@ Der eigene Programmcode wird unter **GNU General Public License Version 3 oder s
 Vollständiger GPL-Text und Drittanbieterhinweise:
 
 ```text
-.gl1tchb1rd/LICENSE_GPL-3.0.txt
-.gl1tchb1rd/LIZENZEN_UND_DRITTANBIETER.txt
+.forensic_sitesaver/LICENSE_GPL-3.0.txt
+.forensic_sitesaver/LIZENZEN_UND_DRITTANBIETER.txt
 ```
 
 Nach der Ersteinrichtung erzeugt die Software zusätzlich:
 
 ```text
-.gl1tchb1rd/INSTALLIERTE_LIZENZEN.txt
+.forensic_sitesaver/INSTALLIERTE_LIZENZEN.txt
 ```
 
 Diese Datei basiert auf den tatsächlich installierten Paketen und übernimmt, soweit auffindbar, deren mitgelieferte Lizenz-/NOTICE-Texte. Playwright-Browser sind nicht Bestandteil dieses Quellcode-Pakets, sondern werden bei der lokalen Einrichtung separat bezogen und behalten ihre jeweiligen Lizenzen.
