@@ -1,0 +1,40 @@
+# Runtime / virtual environments
+.venv/
+.gl1tchb1rd/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# gl1tchb1rd forensic sitesaver generated/runtime files
+Sicherungen/
+HAR_Auswertungen/
+*_Aktenexport/
+*.har
+*.har.zip
+*.pcap
+*.pcapng
+*.log
+
+# Potential forensic case material / exports
+**/01_har/
+**/02_website/
+**/03_screenshots/
+**/04_metadaten/
+**/05_infrastruktur/
+**/06_har_analyse/
+**/07_domain_analyse/
+**/08_tls_zertifikate/
+**/SHA256SUMS.txt
+**/Sicherungsvermerk.txt
+**/EXPORT_MANIFEST.json
+**/EXPORT_MANIFEST.txt
+
+# Locally generated dependency/license inventory
+.gl1tchb1rd/INSTALLIERTE_LIZENZEN.txt
+.gl1tchb1rd/installierte_lizenztexte/
