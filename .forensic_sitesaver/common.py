@@ -154,13 +154,18 @@ def relative_to_case(path: Path, root: Path) -> str:
         return path.name
 
 
-def hash_tree(root: Path, output_name: str = "SHA256SUMS.txt", exclude: set[str] | None = None) -> Path:
+def hash_tree(root: Path, output_name: str = "SHA256SUMS.txt", exclude: set[str] | None = None,
+              exclude_dirs: set[str] | None = None) -> Path:
     exclude = set(exclude or set()) | {output_name}
+    exclude_dirs = set(exclude_dirs or set())
     entries: list[str] = []
     for p in sorted(root.rglob("*")):
         if not p.is_file() or p.name in exclude:
             continue
-        rel = p.relative_to(root).as_posix()
+        rel_path = p.relative_to(root)
+        if any(part in exclude_dirs for part in rel_path.parts[:-1]):
+            continue
+        rel = rel_path.as_posix()
         entries.append(f"{sha256_file(p)}  {rel}")
     out = root / output_name
     write_text(out, "\n".join(entries))
