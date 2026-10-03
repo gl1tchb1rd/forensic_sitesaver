@@ -9,3 +9,5 @@ Enthalten sind insbesondere Website-Sicherung mit segmentierter HAR-Aufzeichnung
 Weitere Punkte der finalen 1.0.0: vereinfachte GUI ohne separate HAR-/Export-Reiter sowie robustere TLS-Zertifikatserfassung über Python `ssl`.
 
 Der Domain-PDF-Bericht führt die strukturierte Domainanalyse und die ergänzenden WHOIS-Details aus `domain_whois.txt` zusammen und dokumentiert beide Quelldateien samt SHA-256.
+
+WHOIS folgt nun IANA-/Registry-Referrals bis zum Registrar; PDF-Aktenberichte enthalten keinen Disclaimer mehr (der Hinweis bleibt in der Programmoberfläche).
