@@ -36,15 +36,21 @@ Beim ersten Start wird im technischen Unterordner eine lokale `.venv` angelegt. 
 - Full-Page-Screenshots
 - sicherer lokaler Website-Spiegel ohne externe Netzwerk-Nachladevorgänge
 - byteidentische lokale Sicherung von während des Browserlaufs erfassten Bildern, CSS, Fonts und Medien
-- HAR-Analyse einschließlich Backend-/API-Kandidaten, Shop-Systemen, Zahlungsdiensten und deduplizierten externen Verbindungen
+- automatische interne HAR-Auswertung einschließlich Backend-/API-Kandidaten, Shop-Systemen, Zahlungsdiensten und deduplizierten externen Verbindungen
 - Domainanalyse als Bestandteil einer Vollsicherung **oder eigenständige Funktion ohne Website-Sicherung**
 - DNS, Registrar, RDAP/WHOIS, Webserver-/Hostinghinweise und GeoIP
 - ausführliche MX-/Mailserveranalyse mit Priorität, Host, IPs, vermutetem Maildienst-Anbieter, Netz-/Hosting-Provider und GeoIP-Standorthinweisen
 - bekannte Origin-/Server-IP kann später manuell und klar gekennzeichnet ergänzt werden
 - TLS-/SSL-Zertifikatssicherung
-- PDF-Aktenexport für Sicherungsvermerk, HAR-Auswertung, Domainanalyse und TLS-Bericht; Domain-only-Analysen lassen sich ebenfalls als PDF exportieren
+- automatische PDF-Aktenberichte im jeweiligen Ergebnisordner unter `PDF-Berichte/`; bei Vollsicherungen für Sicherungsvermerk, HAR-Auswertung, Domainanalyse und TLS-Bericht, bei Domainanalysen für die Domainanalyse
 - SHA-256-Prüfsummen und Transparenzdateien zu externen Diensten/Datenquellen
 - Updateprüfung für Abhängigkeiten (keine stille Selbstaktualisierung des Programmcodes)
+
+## Ergebnisordner und PDF-Berichte
+
+PDF-Aktenberichte werden automatisch erzeugt. Eine eigenständige Domainanalyse erzeugt nur einen Ergebnisordner; darin liegt der Bericht unter `PDF-Berichte/`. Auch bei einer vollständigen Website-Sicherung liegt `PDF-Berichte/` direkt im Sicherungsordner. Nach einer manuellen Origin-IP-Ergänzung wird der Domainbericht automatisch neu erzeugt.
+
+`PDF-Berichte/` enthält abgeleitete Aktenausfertigungen und ein eigenes Exportmanifest mit SHA-256-Prüfsummen. Bei vollständigen Sicherungen wird dieser Ordner bewusst nicht in `SHA256SUMS.txt` der Primärsicherung aufgenommen, damit ein später dokumentierter Origin-IP-Nachtrag die Primärprüfsummen nicht verändert.
 
 ## Sicherheitsmodell
 
