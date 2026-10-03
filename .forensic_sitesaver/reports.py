@@ -136,18 +136,21 @@ def _compose_report_text(title: str, source_file: Path) -> tuple[str, list[Path]
     if title == "Domainanalyse":
         whois_file = source_file.parent / "domain_whois.txt"
         if whois_file.exists():
+            # WHOIS gehört fachlich zur Domainanalyse. Der PDF-Bericht führt
+            # deshalb die strukturierte Domainanalyse und die erhobenen
+            # WHOIS-Rohdaten als zwei nachvollziehbar gehashte Quellen zusammen.
             whois_text = whois_file.read_text(encoding="utf-8", errors="replace").strip()
-            if whois_text:
-                text = (
-                    text.rstrip()
-                    + "\n\n"
-                    + "WHOIS-DETAILS / ROHDATEN\n"
-                    + "=" * 72
-                    + "\n\n"
-                    + whois_text
-                    + "\n"
-                )
-                source_files.append(whois_file)
+            source_files.append(whois_file)
+            text = (
+                text.rstrip()
+                + "\n\n"
+                + "WHOIS-DATEN\n"
+                + "=" * 72
+                + "\n"
+                + "Quelle: domain_whois.txt\n\n"
+                + (whois_text if whois_text else "Keine WHOIS-Rohdaten vorhanden.")
+                + "\n"
+            )
 
     if "HAR" in title.upper():
         text = _clean_har_for_pdf(text)
