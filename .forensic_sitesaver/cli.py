@@ -32,7 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("domain", help="Eigenständige Domain-/Hosting-/MX-Analyse")
     d.add_argument("domain")
     d.add_argument("--output", type=Path, default=Path("Domainanalysen"), help="Elternordner für die neue Analyse")
-    d.add_argument("--pdf", action="store_true", help="Direkt eine PDF-Aktenausfertigung erzeugen")
 
     h = sub.add_parser("har", help="HAR-Datei oder Segmentordner analysieren")
     h.add_argument("input", type=Path)
@@ -74,11 +73,10 @@ def main() -> int:
         host = hostname_from_value(args.domain)
         out = args.output.expanduser().resolve() / f"{timestamp_slug()}_domainanalyse_{sanitize_component(host)}"
         analyze_domain(args.domain, out)
+        pdf_out = out / "PDF-Berichte"
+        export_reports(out, pdf_out, combined=False)
         print(f"Domainanalyse abgeschlossen: {out}")
-        if args.pdf:
-            pdf_out = out.parent / (out.name + "_Aktenexport")
-            export_reports(out, pdf_out, combined=True)
-            print(f"PDF-Aktenexport: {pdf_out}")
+        print(f"PDF-Bericht: {pdf_out}")
         print(f"ERGEBNIS_ORDNER={out}")
         return 0
     if args.command == "har":
@@ -86,9 +84,20 @@ def main() -> int:
         print(f"HAR-Auswertung abgeschlossen: {args.output.resolve()}")
         return 0
     if args.command == "origin":
+        selected = args.domain_dir.expanduser().resolve()
+        domain_dir = selected / "07_domain_analyse" if (selected / "07_domain_analyse" / "Domain_Analyse.txt").exists() else selected
         ips = [x.strip() for x in args.ips.split(",") if x.strip()]
-        supplement_origin_ip(args.domain_dir, ips, args.note)
+        supplement_origin_ip(domain_dir, ips, args.note)
+        if domain_dir.name == "07_domain_analyse" and (domain_dir.parent / "Sicherungsvermerk.txt").exists():
+            report_source = domain_dir.parent
+            pdf_out = report_source / "PDF-Berichte"
+            export_reports(report_source, pdf_out, combined=True)
+        else:
+            report_source = domain_dir
+            pdf_out = domain_dir / "PDF-Berichte"
+            export_reports(report_source, pdf_out, combined=False)
         print("Origin-/Server-IP-Ergänzung abgeschlossen.")
+        print(f"PDF-Bericht aktualisiert: {pdf_out}")
         return 0
     if args.command == "export":
         export_reports(args.source, args.output, combined=not args.no_combined)
