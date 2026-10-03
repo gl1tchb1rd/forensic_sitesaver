@@ -62,7 +62,7 @@ def dependencies_ok(py: Path) -> bool:
     if not py.exists():
         return False
     code = r"""
-import bs4,dns,requests,OpenSSL,cryptography,reportlab,playwright
+import bs4,dns,requests,cryptography,reportlab,playwright
 from importlib.metadata import version
 def vt(s):
     out=[]
