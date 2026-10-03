@@ -1,0 +1,24 @@
+{
+  "tool": "Forensic SiteSaver",
+  "version": "1.0.0",
+  "repository": "https://github.com/gl1tchb1rd/forensic_sitesaver",
+  "files": {
+    ".forensic_sitesaver/CHANGELOG.md": "105cd7cc5a79b4adc6f343f532ad229c69375bdb4e63dce0338ab3e255297205",
+    ".forensic_sitesaver/LICENSE_GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    ".forensic_sitesaver/LIZENZEN_UND_DRITTANBIETER.txt": "f05f031aa7a8cdf2c5b177ac59fb6a81d73b19321aa1c2b729ec024fa8b1ff66",
+    ".forensic_sitesaver/__init__.py": "c6779b60ddb8a7ba5666ace4e7987b21cdf30a14608991358bc0d77027bff4ac",
+    ".forensic_sitesaver/capture.py": "5403ca2ad43dd0345fe983b501aee3575af9123f200da731f7178ad9122c731c",
+    ".forensic_sitesaver/cli.py": "a0f2da71436ef8e86487c9a38d476132bd4001900f1af8374f8cbc42131b3d79",
+    ".forensic_sitesaver/common.py": "ca166db252e97c6dab9092730031f8013cd246aa4d1b733af7bb44493af3b913",
+    ".forensic_sitesaver/domain_analysis.py": "4a1083601a9cee92aa62b5122b43a75cb20cef678017cbd1546e6d1fd5cac86d",
+    ".forensic_sitesaver/gui.py": "c944de10f29318329072e47140c05419039552e107261ed1bd741ed1eb10e39d",
+    ".forensic_sitesaver/har_analysis.py": "d06149d8e0161585dcfd2695c1aa88f349ed0ab608692f4b76b71eeee697cfcf",
+    ".forensic_sitesaver/license_tools.py": "db516e0740768f065751082286ce934a25a56c5dea286ae600de7b3372068f85",
+    ".forensic_sitesaver/reports.py": "55f8f2a784a7027acbeccdad35c799384bf96fc9fdded44eb756c155148f798b",
+    ".forensic_sitesaver/requirements.txt": "a96b96b97951e8e4761e5a95403b208441d0b6332c875afd868288aaf8081114",
+    ".forensic_sitesaver/tls_capture.py": "02645c2ee7ed33f093067f108db3515463a1f6c58ba34c9e4c1aebc09fdd3010",
+    ".forensic_sitesaver/updater.py": "6589323fe1c0d378027353f25a2ef93684a2ddfb9b3357843c8006d4832698e8",
+    "README.md": "16c4f6ddb82847dbb8e8abe3373953c773bedcebfc4bb53a42895b6d96d4a268",
+    "forensic_sitesaver.py": "196a4bfade9b951c469e8e0085330c0cb023fb3d595611ae3ee55b4ee3eb6612"
+  }
+}
