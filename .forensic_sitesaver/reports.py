@@ -79,7 +79,7 @@ def _clean_har_for_pdf(text: str) -> str:
     return "\n".join(out)
 
 
-def _pdf_story(title: str, source_path: Path, source_root: Path, text: str):
+def _pdf_story(title: str, source_paths: list[Path], source_root: Path, text: str):
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("g_title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=16, leading=20, alignment=TA_CENTER, spaceAfter=10)
     meta_style = ParagraphStyle("g_meta", parent=styles["Normal"], fontName="Helvetica", fontSize=8.5, leading=11, textColor="#444444", spaceAfter=4)
@@ -87,15 +87,18 @@ def _pdf_story(title: str, source_path: Path, source_root: Path, text: str):
     heading_style = ParagraphStyle("g_heading", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=11, leading=14, spaceBefore=8, spaceAfter=4)
     mono_style = ParagraphStyle("g_mono", parent=styles["Normal"], fontName="Courier", fontSize=7.5, leading=10, wordWrap="CJK", spaceAfter=2)
 
-    rel = relative_to_case(source_path, source_root)
-    source_hash = sha256_file(source_path)
     story = [
         Paragraph(html.escape(title), title_style),
         Paragraph(f"{html.escape(APP_NAME)} {APP_VERSION}", meta_style),
         Paragraph(f"Projekt / Quellcode: {html.escape(REPOSITORY_URL)}", meta_style),
-        Paragraph(f"Quelle: {html.escape(rel)}", meta_style),
-        Paragraph(f"SHA-256 der Quelldatei: {source_hash}", mono_style),
-        Paragraph("Aktenausfertigung; die Quelldatei im Sicherungs-/Analyseordner bleibt maßgeblich.", meta_style),
+    ]
+    for index, source_path in enumerate(source_paths, 1):
+        rel = relative_to_case(source_path, source_root)
+        label = "Quelle" if len(source_paths) == 1 else f"Quelle {index}"
+        story.append(Paragraph(f"{label}: {html.escape(rel)}", meta_style))
+        story.append(Paragraph(f"SHA-256: {sha256_file(source_path)}", mono_style))
+    story += [
+        Paragraph("Aktenausfertigung; die Quelldateien im Sicherungs-/Analyseordner bleiben maßgeblich.", meta_style),
         Spacer(1, 5 * mm),
     ]
     for raw in text.splitlines():
@@ -115,14 +118,41 @@ def _pdf_story(title: str, source_path: Path, source_root: Path, text: str):
     return story
 
 
-def _build_pdf(path: Path, title: str, source_path: Path, source_root: Path, text: str) -> None:
+def _build_pdf(path: Path, title: str, source_paths: list[Path], source_root: Path, text: str) -> None:
     doc = SimpleDocTemplate(
         str(path), pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm,
         topMargin=16 * mm, bottomMargin=16 * mm,
         title=f"{APP_NAME} – {title}", author=APP_NAME,
     )
-    story = _pdf_story(title, source_path, source_root, text)
+    story = _pdf_story(title, source_paths, source_root, text)
     doc.build(story)
+
+
+def _compose_report_text(title: str, source_file: Path) -> tuple[str, list[Path]]:
+    """Return PDF text and every source file that materially contributes to it."""
+    text = source_file.read_text(encoding="utf-8", errors="replace")
+    source_files = [source_file]
+
+    if title == "Domainanalyse":
+        whois_file = source_file.parent / "domain_whois.txt"
+        if whois_file.exists():
+            whois_text = whois_file.read_text(encoding="utf-8", errors="replace").strip()
+            if whois_text:
+                text = (
+                    text.rstrip()
+                    + "\n\n"
+                    + "WHOIS-DETAILS / ROHDATEN\n"
+                    + "=" * 72
+                    + "\n\n"
+                    + whois_text
+                    + "\n"
+                )
+                source_files.append(whois_file)
+
+    if "HAR" in title.upper():
+        text = _clean_har_for_pdf(text)
+
+    return text, source_files
 
 
 def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dict[str, Any]:
@@ -138,22 +168,28 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
             old.unlink()
 
     manifest: list[dict[str, Any]] = []
-    combined_sections: list[tuple[str, Path, str]] = []
+    combined_sections: list[tuple[str, list[Path], str]] = []
     for filename, title, source_file in reports:
-        text = source_file.read_text(encoding="utf-8", errors="replace")
-        if "HAR" in title.upper():
-            text = _clean_har_for_pdf(text)
+        text, source_files = _compose_report_text(title, source_file)
         out = output_dir / filename
-        _build_pdf(out, title, source_file, source_root, text)
+        _build_pdf(out, title, source_files, source_root, text)
+        sources = [
+            {
+                "file": relative_to_case(path, source_root),
+                "sha256": sha256_file(path),
+            }
+            for path in source_files
+        ]
         row = {
             "title": title,
-            "source_file": relative_to_case(source_file, source_root),
-            "source_sha256": sha256_file(source_file),
+            "source_file": sources[0]["file"],
+            "source_sha256": sources[0]["sha256"],
+            "source_files": sources,
             "pdf_file": out.name,
             "pdf_sha256": sha256_file(out),
         }
         manifest.append(row)
-        combined_sections.append((title, source_file, text))
+        combined_sections.append((title, source_files, text))
 
     combined_file = None
     if combined and combined_sections:
@@ -166,10 +202,10 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
             Paragraph(f"Version {APP_VERSION}<br/>Projekt / Quellcode: {html.escape(REPOSITORY_URL)}<br/>Erstellt: {html.escape(iso_now())}", cover_body), Spacer(1, 8 * mm),
             Paragraph(html.escape(DISCLAIMER), cover_body), PageBreak(),
         ]
-        for idx, (title, source_file, text) in enumerate(combined_sections):
+        for idx, (title, source_files, text) in enumerate(combined_sections):
             if idx:
                 story.append(PageBreak())
-            story.extend(_pdf_story(title, source_file, source_root, text))
+            story.extend(_pdf_story(title, source_files, source_root, text))
         doc = SimpleDocTemplate(
             str(combined_file), pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm,
             topMargin=16 * mm, bottomMargin=16 * mm, title=f"{APP_NAME} – Aktenberichte", author=APP_NAME,
@@ -186,10 +222,11 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
     write_json(output_dir / "EXPORT_MANIFEST.json", bundle)
     lines = [f"{APP_NAME} – Exportmanifest", "", f"Version: {APP_VERSION}", f"Projekt / Quellcode: {REPOSITORY_URL}", f"Erstellt: {bundle['created_at']}", ""]
     for row in manifest:
-        lines += [
-            f"Bericht: {row['title']}", f"Quelle: {row['source_file']}", f"SHA-256 Quelle: {row['source_sha256']}",
-            f"PDF: {row['pdf_file']}", f"SHA-256 PDF: {row['pdf_sha256']}", "",
-        ]
+        lines.append(f"Bericht: {row['title']}")
+        for idx, src in enumerate(row.get("source_files") or [], 1):
+            label = "Quelle" if len(row["source_files"]) == 1 else f"Quelle {idx}"
+            lines += [f"{label}: {src['file']}", f"SHA-256 {label}: {src['sha256']}"]
+        lines += [f"PDF: {row['pdf_file']}", f"SHA-256 PDF: {row['pdf_sha256']}", ""]
     if combined_file:
         lines += [f"Sammel-PDF: {combined_file.name}", f"SHA-256 Sammel-PDF: {sha256_file(combined_file)}", ""]
     lines += ["DISCLAIMER", "-" * 72, DISCLAIMER]
