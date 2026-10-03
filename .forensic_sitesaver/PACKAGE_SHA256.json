@@ -10,7 +10,7 @@
     ".forensic_sitesaver/capture.py": "5403ca2ad43dd0345fe983b501aee3575af9123f200da731f7178ad9122c731c",
     ".forensic_sitesaver/cli.py": "a0f2da71436ef8e86487c9a38d476132bd4001900f1af8374f8cbc42131b3d79",
     ".forensic_sitesaver/common.py": "ca166db252e97c6dab9092730031f8013cd246aa4d1b733af7bb44493af3b913",
-    ".forensic_sitesaver/domain_analysis.py": "4a1083601a9cee92aa62b5122b43a75cb20cef678017cbd1546e6d1fd5cac86d",
+    ".forensic_sitesaver/domain_analysis.py": "c525f4b841f80944e0ccc06f245c621f6571bd0a5fe91c31a814c972f3cb94d2",
     ".forensic_sitesaver/gui.py": "c944de10f29318329072e47140c05419039552e107261ed1bd741ed1eb10e39d",
     ".forensic_sitesaver/har_analysis.py": "d06149d8e0161585dcfd2695c1aa88f349ed0ab608692f4b76b71eeee697cfcf",
     ".forensic_sitesaver/license_tools.py": "db516e0740768f065751082286ce934a25a56c5dea286ae600de7b3372068f85",
