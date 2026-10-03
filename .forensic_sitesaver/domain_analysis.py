@@ -213,25 +213,113 @@ def whois_query(server: str, query: str, external_calls: list[dict[str, Any]], t
     return out
 
 
+def _normalize_whois_server(value: str | None) -> str | None:
+    if not value:
+        return None
+    server = value.strip().strip("<>[](){}.,; ")
+    server = re.sub(r"^(?:whois|rwhois)://", "", server, flags=re.I)
+    server = server.split("/", 1)[0]
+    if server.count(":") == 1:
+        host, port = server.rsplit(":", 1)
+        if port.isdigit():
+            server = host
+    server = server.strip().rstrip(".").lower()
+    return server or None
+
+
+def _whois_referral(text: str, stage: str) -> str | None:
+    if stage == "iana":
+        patterns = (
+            r"(?im)^refer:\s*(\S+)",
+            r"(?im)^whois:\s*(\S+)",
+        )
+    else:
+        patterns = (
+            r"(?im)^Registrar WHOIS Server:\s*(\S+)",
+            r"(?im)^ReferralServer:\s*(?:whois://)?(\S+)",
+            r"(?im)^refer:\s*(\S+)",
+            r"(?im)^Whois Server:\s*(\S+)",
+        )
+    for pattern in patterns:
+        m = re.search(pattern, text or "")
+        if m:
+            server = _normalize_whois_server(m.group(1))
+            if server:
+                return server
+    return None
+
+
+def _whois_query_candidates(server: str, domain: str) -> list[str]:
+    server = server.lower()
+    if server in {"whois.verisign-grs.com", "whois.crsnic.net"}:
+        return [f"domain {domain}", domain, f"={domain}"]
+    return [domain]
+
+
+def _looks_like_domain_whois(text: str, domain: str) -> bool:
+    low = (text or "").lower()
+    d = domain.lower()
+    return (
+        ("domain name:" in low and d in low)
+        or "registry domain id:" in low
+        or "registrar whois server:" in low
+        or (f"domain: {d}" in low)
+    )
+
+
+def _query_domain_whois_server(server: str, domain: str, stage: str,
+                               attempts: list[dict[str, Any]],
+                               external_calls: list[dict[str, Any]]) -> dict[str, Any] | None:
+    candidates = _whois_query_candidates(server, domain)
+    last: dict[str, Any] | None = None
+    for query in candidates:
+        rec = whois_query(server, query, external_calls)
+        rec["stage"] = stage
+        attempts.append(rec)
+        last = rec
+        if rec.get("ok") and _looks_like_domain_whois(rec.get("text", ""), domain):
+            return rec
+        if len(candidates) == 1:
+            return rec
+    return last
+
+
 def whois_bundle(domain: str, external_calls: list[dict[str, Any]]) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
-    tld = domain.rsplit(".", 1)[-1]
-    iana = whois_query("whois.iana.org", tld, external_calls)
-    attempts.append(iana)
-    referral = None
-    if iana.get("ok"):
-        m = re.search(r"(?im)^refer:\s*(\S+)", iana.get("text", ""))
-        if m:
-            referral = m.group(1).strip()
-    if referral:
-        reg = whois_query(referral, domain, external_calls)
-        attempts.append(reg)
-        if reg.get("ok"):
-            m = re.search(r"(?im)^Registrar WHOIS Server:\s*(\S+)", reg.get("text", ""))
-            if m and m.group(1).strip().lower() != referral.lower():
-                attempts.append(whois_query(m.group(1).strip(), domain, external_calls))
-    return {"query": domain, "attempts": attempts}
+    seen_servers: set[str] = set()
 
+    iana = whois_query("whois.iana.org", domain, external_calls)
+    iana["stage"] = "iana"
+    attempts.append(iana)
+    seen_servers.add("whois.iana.org")
+
+    registry = _whois_referral(iana.get("text", ""), "iana") if iana.get("ok") else None
+
+    if not registry:
+        tld = domain.rsplit(".", 1)[-1]
+        iana_tld = whois_query("whois.iana.org", tld, external_calls)
+        iana_tld["stage"] = "iana-tld-fallback"
+        attempts.append(iana_tld)
+        if iana_tld.get("ok"):
+            registry = _whois_referral(iana_tld.get("text", ""), "iana")
+
+    current = _normalize_whois_server(registry)
+    if current and current not in seen_servers:
+        seen_servers.add(current)
+        registry_rec = _query_domain_whois_server(current, domain, "registry", attempts, external_calls)
+        registrar = None
+        if registry_rec and registry_rec.get("ok"):
+            registrar = _whois_referral(registry_rec.get("text", ""), "registry")
+        registrar = _normalize_whois_server(registrar)
+        if registrar and registrar not in seen_servers:
+            seen_servers.add(registrar)
+            _query_domain_whois_server(registrar, domain, "registrar", attempts, external_calls)
+
+    return {
+        "query": domain,
+        "attempts": attempts,
+        "queried_servers": sorted(seen_servers),
+    }
 
 def cymru_asn(ip: str, external_calls: list[dict[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {"ip": ip, "source": "Team Cymru IP-to-ASN DNS"}
@@ -415,7 +503,12 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
     # WHOIS raw text as one readable file.
     whois_lines: list[str] = []
     for i, attempt in enumerate(whois.get("attempts", []) or [], 1):
-        whois_lines += [f"===== WHOIS {i}: {attempt.get('server')} / Query {attempt.get('query')} =====", attempt.get("text") or attempt.get("error") or "", ""]
+        stage = str(attempt.get("stage") or "whois").upper()
+        whois_lines += [
+            f"===== WHOIS {i} [{stage}]: {attempt.get('server')} / Query {attempt.get('query')} =====",
+            attempt.get("text") or attempt.get("error") or "",
+            "",
+        ]
     write_text(output_dir / "domain_whois.txt", "\n".join(whois_lines))
 
     ip_rows: list[dict[str, Any]] = []
