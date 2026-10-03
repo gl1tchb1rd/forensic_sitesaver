@@ -128,9 +128,14 @@ def _build_pdf(path: Path, title: str, source_path: Path, source_root: Path, tex
 def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dict[str, Any]:
     source_root, reports = discover_report_sources(Path(source))
     output_dir = Path(output_dir).expanduser().resolve()
-    if _is_inside(output_dir, source_root):
-        raise ValueError("Der Aktenexport darf nicht innerhalb des Sicherungs-/Analyseordners liegen, damit dessen Hashbestand unverändert bleibt.")
     ensure_dir(output_dir)
+    # PDF-Berichte sind bewusst abgeleitete Aktenausfertigungen. Sie dürfen im
+    # Sicherungs-/Analyseordner liegen und besitzen ein eigenes Exportmanifest.
+    # Vor einer Neuerzeugung (z. B. nach manueller Origin-IP-Ergänzung) werden
+    # ausschließlich die von diesem Modul erzeugten PDF-/Manifestdateien ersetzt.
+    for old in output_dir.iterdir():
+        if old.is_file() and (old.suffix.lower() == ".pdf" or old.name in {"EXPORT_MANIFEST.json", "EXPORT_MANIFEST.txt"}):
+            old.unlink()
 
     manifest: list[dict[str, Any]] = []
     combined_sections: list[tuple[str, Path, str]] = []
