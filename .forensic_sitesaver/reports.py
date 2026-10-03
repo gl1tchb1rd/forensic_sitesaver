@@ -129,12 +129,25 @@ def _build_pdf(path: Path, title: str, source_paths: list[Path], source_root: Pa
 
 
 def _strip_disclaimer_tail(text: str) -> str:
-    """Remove a trailing DISCLAIMER section from human-readable source reports."""
-    return re.sub(
-        r"(?ims)\n\s*DISCLAIMER\s*\n[-=]{3,}\s*\n.*\Z",
-        "\n",
-        text,
-    ).rstrip() + "\n"
+    """Remove DISCLAIMER sections without removing later report supplements."""
+    lines = text.splitlines()
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip().upper() == "DISCLAIMER":
+            i += 1
+            if i < len(lines) and lines[i].strip() and set(lines[i].strip()) <= {"-", "="}:
+                i += 1
+            while i < len(lines) and lines[i].strip():
+                i += 1
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            if out and out[-1] != "":
+                out.append("")
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out).rstrip() + "\n"
 
 
 def _compose_report_text(title: str, source_file: Path) -> tuple[str, list[Path]]:
