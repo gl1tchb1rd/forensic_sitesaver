@@ -14,7 +14,7 @@ import requests
 
 from common import (
     APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL, USER_AGENT, ensure_dir, hostname_from_value,
-    iso_now, registrable_domain, safe_exception, sanitize_component, write_csv,
+    iso_now, registrable_domain, safe_exception, sanitize_component, sha256_file, write_csv,
     write_json, write_text,
 )
 
@@ -577,7 +577,21 @@ def supplement_origin_ip(domain_dir: Path, ips: list[str], note: str = "") -> di
     combined_data = {"automatic_domain_analysis": base_data, "manual_origin_ip_supplement": result}
     write_json(domain_dir / "domain_analysis_mit_manueller_origin_ip.json", combined_data)
 
-    write_json(domain_dir / "EXTERNE_DIENSTE_MANUELLE_ORIGIN_IP.json", {
+    transparency_file = domain_dir / "EXTERNE_DIENSTE_MANUELLE_ORIGIN_IP.json"
+    write_json(transparency_file, {
         "created_at": iso_now(), "external_communications_and_sources": external_calls
     })
+
+    # Die Origin-IP-Ergänzung ist ein nachträglicher, klar abgegrenzter Befund.
+    # Sie erhält deshalb einen eigenen Hashsatz und verändert den ursprünglichen
+    # SHA256SUMS-Bestand einer vollständigen Sicherung nicht.
+    supplement_files = [
+        domain_dir / "manual_origin_ips.json",
+        supplement,
+        combined,
+        domain_dir / "domain_analysis_mit_manueller_origin_ip.json",
+        transparency_file,
+    ]
+    hash_lines = [f"{sha256_file(path)}  {path.name}" for path in supplement_files if path.exists()]
+    write_text(domain_dir / "MANUELLE_ERGAENZUNG_SHA256SUMS.txt", "\n".join(hash_lines))
     return result
