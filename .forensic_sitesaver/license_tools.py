@@ -13,7 +13,6 @@ DIRECT_DEPENDENCIES = [
     ("beautifulsoup4", "MIT", "https://pypi.org/project/beautifulsoup4/"),
     ("dnspython", "ISC", "https://pypi.org/project/dnspython/"),
     ("requests", "Apache-2.0", "https://pypi.org/project/requests/"),
-    ("pyOpenSSL", "Apache-2.0", "https://pypi.org/project/pyOpenSSL/"),
     ("cryptography", "Apache-2.0 OR BSD-3-Clause", "https://pypi.org/project/cryptography/"),
     ("reportlab", "BSD", "https://pypi.org/project/reportlab/"),
 ]
