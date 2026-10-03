@@ -28,6 +28,7 @@ from common import (
 from domain_analysis import analyze_domain
 from har_analysis import analyze_har, discover_har_files, read_har_document
 from tls_capture import capture_tls
+from reports import export_reports
 
 ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base"}
 RESOURCE_MIME_PREFIXES = ("image/", "font/", "audio/", "video/", "text/css")
@@ -618,7 +619,12 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
     ]
     write_text(case_root / "Sicherungsvermerk.txt", "\n".join(remark))
 
+    # Automatische Aktenausfertigungen. PDF-Berichte sind abgeleitete Dateien
+    # mit eigenem Exportmanifest und werden nicht in den primären Hashbestand
+    # aufgenommen, damit sie nach späteren dokumentierten Ergänzungen (z. B.
+    # Origin-IP) regeneriert werden können, ohne die Primärsicherung zu verändern.
+    export_reports(case_root, case_root / "PDF-Berichte", combined=True)
     _write_size_report(case_root)
-    hash_tree(case_root)
+    hash_tree(case_root, exclude_dirs={"PDF-Berichte"})
     print(f"Sicherung abgeschlossen: {case_root}", flush=True)
     return case_root
