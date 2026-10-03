@@ -118,23 +118,21 @@ class App(tk.Tk):
     def _header(self) -> None:
         f = ttk.Frame(self, padding=(14, 12, 14, 8)); f.pack(fill="x")
         ttk.Label(f, text=f"{APP_NAME} {APP_VERSION}", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(f, text="Passive Website-Sicherung, HAR-Auswertung und eigenständige Domain-/Hosting-/MX-Analyse.", style="Hint.TLabel").pack(anchor="w", pady=(3,0))
+        ttk.Label(f, text="Passive Website-Sicherung und eigenständige Domain-/Hosting-/MX-Analyse.", style="Hint.TLabel").pack(anchor="w", pady=(3,0))
 
     def _tabs(self) -> None:
         self.tabs = ttk.Notebook(self); self.tabs.pack(fill="x", padx=14, pady=(0,8))
         self.t_capture = ttk.Frame(self.tabs, padding=12)
         self.t_domain = ttk.Frame(self.tabs, padding=12)
-        self.t_har = ttk.Frame(self.tabs, padding=12)
         self.t_origin = ttk.Frame(self.tabs, padding=12)
-        self.t_export = ttk.Frame(self.tabs, padding=12)
         self.t_update = ttk.Frame(self.tabs, padding=12)
         self.t_about = ttk.Frame(self.tabs, padding=12)
         for frame, title in [
-            (self.t_capture,"Website-Sicherung"),(self.t_domain,"Domain-Analyse"),(self.t_har,"HAR-Analyse"),
-            (self.t_origin,"Origin-IP ergänzen"),(self.t_export,"Berichte exportieren"),(self.t_update,"Updates"),(self.t_about,"Über"),
+            (self.t_capture,"Website-Sicherung"),(self.t_domain,"Domain-Analyse"),
+            (self.t_origin,"Origin-IP ergänzen"),(self.t_update,"Updates"),(self.t_about,"Über"),
         ]:
             self.tabs.add(frame, text=title)
-        self._capture_tab(); self._domain_tab(); self._har_tab(); self._origin_tab(); self._export_tab(); self._update_tab(); self._about_tab()
+        self._capture_tab(); self._domain_tab(); self._origin_tab(); self._update_tab(); self._about_tab()
 
     def _entry(self, parent, row, label, var, browse=None):
         ttk.Label(parent, text=label).grid(row=row,column=0,sticky="w",padx=(0,10),pady=4)
@@ -167,48 +165,20 @@ class App(tk.Tk):
 
     def _domain_tab(self):
         f=self.t_domain
-        self.dom_value=tk.StringVar(); self.dom_out=tk.StringVar(value=str(PUBLIC_ROOT/"Domainanalysen")); self.dom_pdf=tk.BooleanVar(value=True)
+        self.dom_value=tk.StringVar(); self.dom_out=tk.StringVar(value=str(PUBLIC_ROOT/"Domainanalysen"))
         self._entry(f,0,"Domain / URL:",self.dom_value)
         self._entry(f,1,"Ausgabe-Elternordner:",self.dom_out,lambda:self._choose_dir(self.dom_out))
-        ttk.Checkbutton(f,text="Direkt PDF-Aktenausfertigung erzeugen",variable=self.dom_pdf).grid(row=2,column=1,sticky="w",pady=5)
-        ttk.Label(f,text="Analysiert DNS, Registrar/RDAP/WHOIS, Webserver/Hosting und besonders MX-/Mailserver-Infrastruktur inklusive Provider- und GeoIP-Hinweisen.",wraplength=900,style="Hint.TLabel").grid(row=3,column=0,columnspan=3,sticky="w",pady=(3,8))
-        ttk.Button(f,text="Domain analysieren",command=self.start_domain).grid(row=4,column=0,sticky="w")
-
-    def _har_tab(self):
-        f=self.t_har
-        self.har_in=tk.StringVar(); self.har_out=tk.StringVar(value=str(PUBLIC_ROOT/"HAR_Auswertungen")); self.har_base=tk.StringVar()
-        ttk.Label(f,text="HAR-Datei / Segmentordner:").grid(row=0,column=0,sticky="w",padx=(0,10),pady=4)
-        ttk.Entry(f,textvariable=self.har_in).grid(row=0,column=1,sticky="ew")
-        bf=ttk.Frame(f); bf.grid(row=0,column=2,padx=(8,0)); ttk.Button(bf,text="Datei …",command=self._har_file).pack(side="left"); ttk.Button(bf,text="Ordner …",command=self._har_dir).pack(side="left",padx=4)
-        f.columnconfigure(1,weight=1)
-        self._entry(f,1,"Bezugs-URL (optional):",self.har_base)
-        self._entry(f,2,"Ausgabeordner:",self.har_out,lambda:self._choose_dir(self.har_out))
-        ttk.Button(f,text="HAR analysieren",command=self.start_har).grid(row=3,column=0,sticky="w",pady=(8,0))
-
-    def _har_file(self):
-        p=filedialog.askopenfilename(filetypes=[("HAR/ZIP","*.har *.zip"),("Alle Dateien","*.*")]);
-        if p:self.har_in.set(p)
-    def _har_dir(self):
-        p=filedialog.askdirectory();
-        if p:self.har_in.set(p)
+        ttk.Label(f,text="Analysiert DNS, Registrar/RDAP/WHOIS, Webserver/Hosting und besonders MX-/Mailserver-Infrastruktur inklusive Provider- und GeoIP-Hinweisen. Der PDF-Bericht wird automatisch im Ergebnisordner unter PDF-Berichte erzeugt.",wraplength=900,style="Hint.TLabel").grid(row=2,column=0,columnspan=3,sticky="w",pady=(3,8))
+        ttk.Button(f,text="Domain analysieren",command=self.start_domain).grid(row=3,column=0,sticky="w")
 
     def _origin_tab(self):
         f=self.t_origin
         self.org_dir=tk.StringVar(); self.org_ips=tk.StringVar(); self.org_note=tk.StringVar()
-        self._entry(f,0,"Domainanalyse-Ordner:",self.org_dir,lambda:self._choose_dir(self.org_dir))
+        self._entry(f,0,"Domainanalyse- oder Sicherungsordner:",self.org_dir,lambda:self._choose_dir(self.org_dir))
         self._entry(f,1,"Bekannte Origin-/Server-IP(s):",self.org_ips)
         self._entry(f,2,"Quelle / Ermittlungsvermerk:",self.org_note)
-        ttk.Label(f,text="Die IP wird nicht vom Programm als Origin ermittelt, sondern ausschließlich als manuell vorgegebener Befund gekennzeichnet und technisch angereichert.",wraplength=900,style="Hint.TLabel").grid(row=3,column=0,columnspan=3,sticky="w",pady=(4,8))
+        ttk.Label(f,text="Die IP wird nicht vom Programm als Origin ermittelt, sondern ausschließlich als manuell vorgegebener Befund gekennzeichnet und technisch angereichert. Der zugehörige PDF-Bericht wird danach automatisch aktualisiert.",wraplength=900,style="Hint.TLabel").grid(row=3,column=0,columnspan=3,sticky="w",pady=(4,8))
         ttk.Button(f,text="Origin-IP ergänzen",command=self.start_origin).grid(row=4,column=0,sticky="w")
-
-    def _export_tab(self):
-        f=self.t_export
-        self.exp_source=tk.StringVar(); self.exp_out=tk.StringVar(); self.exp_combined=tk.BooleanVar(value=True)
-        self._entry(f,0,"Sicherungs- oder Domainanalyse-Ordner:",self.exp_source,lambda:self._choose_dir(self.exp_source))
-        self._entry(f,1,"Exportordner:",self.exp_out,lambda:self._choose_dir(self.exp_out))
-        ttk.Checkbutton(f,text="Zusätzlich Sammel-PDF erzeugen",variable=self.exp_combined).grid(row=2,column=1,sticky="w",pady=5)
-        ttk.Label(f,text="Der Export wird außerhalb des Primärordners erzeugt, damit dessen Prüfsummenbestand unverändert bleibt. Bei vorhandener manueller Origin-IP wird automatisch die kombinierte Domainanalyse verwendet.",wraplength=900,style="Hint.TLabel").grid(row=3,column=0,columnspan=3,sticky="w",pady=(4,8))
-        ttk.Button(f,text="Berichte als PDF exportieren",command=self.start_export).grid(row=4,column=0,sticky="w")
 
     def _update_tab(self):
         f=self.t_update
@@ -278,26 +248,11 @@ class App(tk.Tk):
     def start_domain(self):
         if not self.dom_value.get().strip():return messagebox.showerror("Fehlende Domain","Bitte Domain/URL eingeben.")
         args=["domain",self.dom_value.get().strip(),"--output",self.dom_out.get()]
-        if self.dom_pdf.get():args.append("--pdf")
         self.runner.start(args,"Eigenständige Domain-/Hosting-/MX-Analyse")
 
-    def start_har(self):
-        if not self.har_in.get().strip():return messagebox.showerror("Fehlende HAR","Bitte HAR-Datei oder Segmentordner auswählen.")
-        args=["har",self.har_in.get(),"--output",self.har_out.get()]
-        if self.har_base.get().strip():args += ["--base-url",self.har_base.get().strip()]
-        self.runner.start(args,"HAR-Analyse")
-
     def start_origin(self):
-        if not self.org_dir.get().strip() or not self.org_ips.get().strip():return messagebox.showerror("Fehlende Angaben","Domainanalyse-Ordner und IP sind erforderlich.")
+        if not self.org_dir.get().strip() or not self.org_ips.get().strip():return messagebox.showerror("Fehlende Angaben","Domainanalyse-/Sicherungsordner und IP sind erforderlich.")
         self.runner.start(["origin","--domain-dir",self.org_dir.get(),"--ips",self.org_ips.get(),"--note",self.org_note.get()],"Origin-/Server-IP-Ergänzung")
-
-    def start_export(self):
-        if not self.exp_source.get().strip():return messagebox.showerror("Fehlende Quelle","Bitte Sicherungs-/Domainanalyse-Ordner auswählen.")
-        src=Path(self.exp_source.get()).resolve()
-        if not self.exp_out.get().strip():self.exp_out.set(str(src.parent/(src.name+"_Aktenexport")))
-        args=["export","--source",str(src),"--output",self.exp_out.get()]
-        if not self.exp_combined.get():args.append("--no-combined")
-        self.runner.start(args,"PDF-Aktenexport")
 
     def start_update(self):
         if messagebox.askyesno("Abhängigkeiten aktualisieren","Freigegebene Python-Abhängigkeiten und Playwright-Browser aktualisieren?\n\nDer Programmcode selbst wird nicht ersetzt."):
