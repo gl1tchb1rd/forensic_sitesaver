@@ -14,7 +14,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 
-from common import APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL, ensure_dir, iso_now, relative_to_case, sha256_file, write_json, write_text
+from common import APP_NAME, APP_VERSION, REPOSITORY_URL, ensure_dir, iso_now, relative_to_case, sha256_file, write_json, write_text
 
 
 def _is_inside(child: Path, parent: Path) -> bool:
@@ -128,9 +128,18 @@ def _build_pdf(path: Path, title: str, source_paths: list[Path], source_root: Pa
     doc.build(story)
 
 
+def _strip_disclaimer_tail(text: str) -> str:
+    """Remove a trailing DISCLAIMER section from human-readable source reports."""
+    return re.sub(
+        r"(?ims)\n\s*DISCLAIMER\s*\n[-=]{3,}\s*\n.*\Z",
+        "\n",
+        text,
+    ).rstrip() + "\n"
+
+
 def _compose_report_text(title: str, source_file: Path) -> tuple[str, list[Path]]:
     """Return PDF text and every source file that materially contributes to it."""
-    text = source_file.read_text(encoding="utf-8", errors="replace")
+    text = _strip_disclaimer_tail(source_file.read_text(encoding="utf-8", errors="replace"))
     source_files = [source_file]
 
     if title == "Domainanalyse":
@@ -203,7 +212,7 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
         story = [
             Spacer(1, 35 * mm), Paragraph(html.escape(f"{APP_NAME} – Aktenberichte"), cover_title), Spacer(1, 8 * mm),
             Paragraph(f"Version {APP_VERSION}<br/>Projekt / Quellcode: {html.escape(REPOSITORY_URL)}<br/>Erstellt: {html.escape(iso_now())}", cover_body), Spacer(1, 8 * mm),
-            Paragraph(html.escape(DISCLAIMER), cover_body), PageBreak(),
+            PageBreak(),
         ]
         for idx, (title, source_files, text) in enumerate(combined_sections):
             if idx:
@@ -220,7 +229,6 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
         "source_type": "full_capture" if (source_root / "Sicherungsvermerk.txt").exists() else "standalone_domain_analysis",
         "reports": manifest,
         "combined_pdf": ({"file": combined_file.name, "sha256": sha256_file(combined_file)} if combined_file else None),
-        "disclaimer": DISCLAIMER,
     }
     write_json(output_dir / "EXPORT_MANIFEST.json", bundle)
     lines = [f"{APP_NAME} – Exportmanifest", "", f"Version: {APP_VERSION}", f"Projekt / Quellcode: {REPOSITORY_URL}", f"Erstellt: {bundle['created_at']}", ""]
@@ -232,6 +240,5 @@ def export_reports(source: Path, output_dir: Path, combined: bool = True) -> dic
         lines += [f"PDF: {row['pdf_file']}", f"SHA-256 PDF: {row['pdf_sha256']}", ""]
     if combined_file:
         lines += [f"Sammel-PDF: {combined_file.name}", f"SHA-256 Sammel-PDF: {sha256_file(combined_file)}", ""]
-    lines += ["DISCLAIMER", "-" * 72, DISCLAIMER]
     write_text(output_dir / "EXPORT_MANIFEST.txt", "\n".join(lines))
     return bundle
