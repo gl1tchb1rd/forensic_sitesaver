@@ -227,8 +227,9 @@ def _normalize_whois_server(value: str | None) -> str | None:
     return server or None
 
 
-def _whois_referral(text: str, stage: str) -> str | None:
-    if stage == "iana":
+def _whois_referrals(text: str, stage: str) -> list[str]:
+    """Extract every WHOIS referral server from a response, preserving order."""
+    if stage.startswith("iana"):
         patterns = (
             r"(?im)^refer:\s*(\S+)",
             r"(?im)^whois:\s*(\S+)",
@@ -236,23 +237,27 @@ def _whois_referral(text: str, stage: str) -> str | None:
     else:
         patterns = (
             r"(?im)^Registrar WHOIS Server:\s*(\S+)",
+            r"(?im)^Registry WHOIS Server:\s*(\S+)",
             r"(?im)^ReferralServer:\s*(?:whois://)?(\S+)",
-            r"(?im)^refer:\s*(\S+)",
             r"(?im)^Whois Server:\s*(\S+)",
+            r"(?im)^refer:\s*(\S+)",
         )
+
+    found: list[str] = []
     for pattern in patterns:
-        m = re.search(pattern, text or "")
-        if m:
-            server = _normalize_whois_server(m.group(1))
-            if server:
-                return server
-    return None
+        for match in re.finditer(pattern, text or ""):
+            server = _normalize_whois_server(match.group(1))
+            if server and server not in found:
+                found.append(server)
+    return found
 
 
 def _whois_query_candidates(server: str, domain: str) -> list[str]:
     server = server.lower()
     if server in {"whois.verisign-grs.com", "whois.crsnic.net"}:
-        return [f"domain {domain}", domain, f"={domain}"]
+        # VeriSign's classic WHOIS accepts an explicit domain-search command.
+        # "dom" is also what CentralOps currently uses successfully.
+        return [f"dom {domain}", f"domain {domain}", f"={domain}", domain]
     return [domain]
 
 
@@ -275,6 +280,7 @@ def _query_domain_whois_server(server: str, domain: str, stage: str,
     for query in candidates:
         rec = whois_query(server, query, external_calls)
         rec["stage"] = stage
+        rec["query_variant"] = query
         attempts.append(rec)
         last = rec
         if rec.get("ok") and _looks_like_domain_whois(rec.get("text", ""), domain):
@@ -284,41 +290,85 @@ def _query_domain_whois_server(server: str, domain: str, stage: str,
     return last
 
 
-def whois_bundle(domain: str, external_calls: list[dict[str, Any]]) -> dict[str, Any]:
-    attempts: list[dict[str, Any]] = []
-    seen_servers: set[str] = set()
+def whois_bundle(domain: str, external_calls: list[dict[str, Any]],
+                 max_referral_servers: int = 8) -> dict[str, Any]:
+    """Follow WHOIS referrals until no new server is named.
 
-    iana = whois_query("whois.iana.org", domain, external_calls)
+    The limit is only a loop/abuse safeguard, not a normal hop limit.
+    Typical gTLD flow is IANA -> registry -> registrar.
+    """
+    attempts: list[dict[str, Any]] = []
+    queried_servers: list[str] = []
+    seen_servers: set[str] = set()
+    referral_queue: list[tuple[str, str, str]] = []
+
+    def remember_server(server: str) -> None:
+        if server not in seen_servers:
+            seen_servers.add(server)
+            queried_servers.append(server)
+
+    def enqueue(server: str | None, stage: str, referred_by: str) -> None:
+        normalized = _normalize_whois_server(server)
+        if not normalized or normalized in seen_servers:
+            return
+        if any(item[0] == normalized for item in referral_queue):
+            return
+        referral_queue.append((normalized, stage, referred_by))
+
+    # Start at IANA. Querying the full domain often works; if IANA does not
+    # return a referral, fall back to the TLD itself.
+    iana_server = "whois.iana.org"
+    remember_server(iana_server)
+    iana = whois_query(iana_server, domain, external_calls)
     iana["stage"] = "iana"
     attempts.append(iana)
-    seen_servers.add("whois.iana.org")
 
-    registry = _whois_referral(iana.get("text", ""), "iana") if iana.get("ok") else None
-
-    if not registry:
+    initial_referrals = _whois_referrals(iana.get("text", ""), "iana") if iana.get("ok") else []
+    if not initial_referrals:
         tld = domain.rsplit(".", 1)[-1]
-        iana_tld = whois_query("whois.iana.org", tld, external_calls)
+        iana_tld = whois_query(iana_server, tld, external_calls)
         iana_tld["stage"] = "iana-tld-fallback"
         attempts.append(iana_tld)
         if iana_tld.get("ok"):
-            registry = _whois_referral(iana_tld.get("text", ""), "iana")
+            initial_referrals = _whois_referrals(iana_tld.get("text", ""), "iana-tld-fallback")
 
-    current = _normalize_whois_server(registry)
-    if current and current not in seen_servers:
-        seen_servers.add(current)
-        registry_rec = _query_domain_whois_server(current, domain, "registry", attempts, external_calls)
-        registrar = None
-        if registry_rec and registry_rec.get("ok"):
-            registrar = _whois_referral(registry_rec.get("text", ""), "registry")
-        registrar = _normalize_whois_server(registrar)
-        if registrar and registrar not in seen_servers:
-            seen_servers.add(registrar)
-            _query_domain_whois_server(registrar, domain, "registrar", attempts, external_calls)
+    for server in initial_referrals:
+        enqueue(server, "registry", iana_server)
+
+    followed = 0
+    truncated = False
+
+    while referral_queue:
+        if followed >= max_referral_servers:
+            truncated = True
+            break
+
+        server, stage, referred_by = referral_queue.pop(0)
+        if server in seen_servers:
+            continue
+
+        remember_server(server)
+        followed += 1
+        rec = _query_domain_whois_server(server, domain, stage, attempts, external_calls)
+        if not rec:
+            continue
+
+        rec["referred_by"] = referred_by
+        referrals = _whois_referrals(rec.get("text", ""), stage) if rec.get("ok") else []
+        rec["referrals_found"] = referrals
+
+        # Every later referral is followed as well. The labels are descriptive
+        # only; the traversal itself is generic and does not stop after Registrar.
+        next_stage = "registrar" if stage == "registry" else f"referral-{followed + 1}"
+        for target in referrals:
+            enqueue(target, next_stage, server)
 
     return {
         "query": domain,
         "attempts": attempts,
-        "queried_servers": sorted(seen_servers),
+        "queried_servers": queried_servers,
+        "referral_limit": max_referral_servers,
+        "referral_limit_reached": truncated,
     }
 
 def cymru_asn(ip: str, external_calls: list[dict[str, Any]]) -> dict[str, Any]:
