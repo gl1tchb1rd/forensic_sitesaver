@@ -13,3 +13,5 @@ Der Domain-PDF-Bericht führt die strukturierte Domainanalyse und die ergänzend
 WHOIS folgt nun IANA-/Registry-Referrals bis zum Registrar; PDF-Aktenberichte enthalten keinen Disclaimer mehr (der Hinweis bleibt in der Programmoberfläche).
 
 WHOIS-Referral-Chaining folgt nun generisch allen neu genannten WHOIS-Servern bis zum Ende der Kette; VeriSign wird bevorzugt mit `dom <domain>` abgefragt.
+
+WHOIS-Referral-Erkennung ist jetzt tolerant gegenüber Einrückungen, Tabs und unterschiedlichen Feldbezeichnungen; `domain_whois.txt` protokolliert die erkannte Referral-Kette.
