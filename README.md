@@ -41,7 +41,7 @@ Beim ersten Start wird im technischen Unterordner eine lokale `.venv` angelegt. 
 - DNS, Registrar, RDAP/WHOIS, Webserver-/Hostinghinweise und GeoIP
 - ausführliche MX-/Mailserveranalyse mit Priorität, Host, IPs, vermutetem Maildienst-Anbieter, Netz-/Hosting-Provider und GeoIP-Standorthinweisen
 - Domain-PDF kombiniert die strukturierte `Domain_Analyse.txt` mit den ergänzenden WHOIS-Details aus `domain_whois.txt`; beide Quellen und SHA-256-Werte werden im PDF und Exportmanifest ausgewiesen
-- WHOIS folgt Registry-/Registrar-Verweisen automatisch (IANA → zuständige Registry → Registrar, soweit der jeweilige WHOIS-Dienst verfügbar ist)
+- WHOIS verfolgt Referral-Ketten generisch bis zum letzten erreichbaren WHOIS-Server (typisch IANA → Registry → Registrar); bereits besuchte Server werden zur Schleifenvermeidung nicht erneut abgefragt
 - bekannte Origin-/Server-IP kann später manuell und klar gekennzeichnet ergänzt werden
 - TLS-/SSL-Zertifikatssicherung
 - automatische PDF-Aktenberichte im jeweiligen Ergebnisordner unter `PDF-Berichte/`; bei Vollsicherungen für Sicherungsvermerk, HAR-Auswertung, Domainanalyse und TLS-Bericht, bei Domainanalysen für die Domainanalyse
