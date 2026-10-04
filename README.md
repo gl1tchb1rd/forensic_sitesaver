@@ -39,6 +39,7 @@ Beim ersten Start wird im technischen Unterordner eine lokale `.venv` angelegt. 
 - automatische interne HAR-Auswertung einschließlich Backend-/API-Kandidaten, Shop-Systemen, Zahlungsdiensten und deduplizierten externen Verbindungen
 - Domainanalyse als Bestandteil einer Vollsicherung **oder eigenständige Funktion ohne Website-Sicherung**
 - DNS, Registrar, RDAP/WHOIS, Webserver-/Hostinghinweise und GeoIP
+- `.de`-Sonderauswertung über die öffentliche DENIC-Domainabfrage: verwaltendes DENIC-Mitglied, Registrierungsdatum, letzte Aktualisierung und – soweit öffentlich – Inhaberdaten juristischer Personen; Rohdaten werden separat gesichert
 - ausführliche MX-/Mailserveranalyse mit Priorität, Host, IPs, vermutetem Maildienst-Anbieter, Netz-/Hosting-Provider und GeoIP-Standorthinweisen
 - Domain-PDF kombiniert die strukturierte `Domain_Analyse.txt` mit den ergänzenden WHOIS-Details aus `domain_whois.txt`; beide Quellen und SHA-256-Werte werden im PDF und Exportmanifest ausgewiesen
 - WHOIS verfolgt Referral-Ketten generisch bis zum letzten erreichbaren WHOIS-Server (typisch IANA → Registry → Registrar); bereits besuchte Server werden zur Schleifenvermeidung nicht erneut abgefragt
