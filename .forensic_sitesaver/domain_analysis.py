@@ -228,27 +228,48 @@ def _normalize_whois_server(value: str | None) -> str | None:
 
 
 def _whois_referrals(text: str, stage: str) -> list[str]:
-    """Extract every WHOIS referral server from a response, preserving order."""
-    if stage.startswith("iana"):
-        patterns = (
-            r"(?im)^refer:\s*(\S+)",
-            r"(?im)^whois:\s*(\S+)",
-        )
-    else:
-        patterns = (
-            r"(?im)^Registrar WHOIS Server:\s*(\S+)",
-            r"(?im)^Registry WHOIS Server:\s*(\S+)",
-            r"(?im)^ReferralServer:\s*(?:whois://)?(\S+)",
-            r"(?im)^Whois Server:\s*(\S+)",
-            r"(?im)^refer:\s*(\S+)",
-        )
+    """Alle WHOIS-Referrals tolerant aus einer Antwort extrahieren.
 
+    WHOIS-Ausgaben sind nicht einheitlich formatiert. Insbesondere Einrückungen,
+    unterschiedliche Groß-/Kleinschreibung und Varianten wie ReferralServer,
+    Registrar WHOIS Server oder WHOIS Server kommen real vor.
+    """
     found: list[str] = []
-    for pattern in patterns:
-        for match in re.finditer(pattern, text or ""):
-            server = _normalize_whois_server(match.group(1))
-            if server and server not in found:
-                found.append(server)
+    labels = {
+        "refer",
+        "whois",
+        "whois server",
+        "registrar whois server",
+        "registry whois server",
+        "referralserver",
+        "referral server",
+    }
+
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+
+        label, value = line.split(":", 1)
+        normalized_label = re.sub(r"[ \t]+", " ", label.strip().lower())
+
+        # IANA-Antworten verwenden typischerweise "whois:" oder "refer:".
+        # Spätere WHOIS-Server verwenden häufig "Registrar WHOIS Server:",
+        # "Whois Server:" oder "ReferralServer:".
+        if normalized_label not in labels:
+            continue
+
+        candidate = value.strip()
+        if not candidate:
+            continue
+
+        # Bei ReferralServer kann der Wert z. B. whois://server.example/ lauten.
+        # Nur der erste whitespace-getrennte Wert ist der Serververweis.
+        candidate = candidate.split()[0]
+        server = _normalize_whois_server(candidate)
+        if server and server not in found:
+            found.append(server)
+
     return found
 
 
@@ -324,6 +345,7 @@ def whois_bundle(domain: str, external_calls: list[dict[str, Any]],
     attempts.append(iana)
 
     initial_referrals = _whois_referrals(iana.get("text", ""), "iana") if iana.get("ok") else []
+    iana["referrals_found"] = list(initial_referrals)
     if not initial_referrals:
         tld = domain.rsplit(".", 1)[-1]
         iana_tld = whois_query(iana_server, tld, external_calls)
@@ -331,6 +353,7 @@ def whois_bundle(domain: str, external_calls: list[dict[str, Any]],
         attempts.append(iana_tld)
         if iana_tld.get("ok"):
             initial_referrals = _whois_referrals(iana_tld.get("text", ""), "iana-tld-fallback")
+        iana_tld["referrals_found"] = list(initial_referrals)
 
     for server in initial_referrals:
         enqueue(server, "registry", iana_server)
@@ -551,11 +574,22 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
     write_json(output_dir / "dns_records.json", dns_data)
     write_json(output_dir / "domain_rdap.json", rdap)
     # WHOIS raw text as one readable file.
-    whois_lines: list[str] = []
+    whois_lines: list[str] = [
+        "WHOIS-VERFOLGUNG",
+        "=" * 72,
+        " -> ".join(whois.get("queried_servers", []) or []) or "keine WHOIS-Server abgefragt",
+        f"Referral-Sicherheitslimit erreicht: {'JA' if whois.get('referral_limit_reached') else 'nein'}",
+        "",
+    ]
     for i, attempt in enumerate(whois.get("attempts", []) or [], 1):
         stage = str(attempt.get("stage") or "whois").upper()
+        referrals = attempt.get("referrals_found")
+        referral_text = ", ".join(referrals) if referrals else "-"
         whois_lines += [
             f"===== WHOIS {i} [{stage}]: {attempt.get('server')} / Query {attempt.get('query')} =====",
+            f"Referral von: {attempt.get('referred_by') or '-'}",
+            f"Erkannte weitere WHOIS-Server: {referral_text}",
+            "",
             attempt.get("text") or attempt.get("error") or "",
             "",
         ]
