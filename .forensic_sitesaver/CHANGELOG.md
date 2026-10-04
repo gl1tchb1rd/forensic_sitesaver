@@ -11,3 +11,5 @@ Weitere Punkte der finalen 1.0.0: vereinfachte GUI ohne separate HAR-/Export-Rei
 Der Domain-PDF-Bericht führt die strukturierte Domainanalyse und die ergänzenden WHOIS-Details aus `domain_whois.txt` zusammen und dokumentiert beide Quelldateien samt SHA-256.
 
 WHOIS folgt nun IANA-/Registry-Referrals bis zum Registrar; PDF-Aktenberichte enthalten keinen Disclaimer mehr (der Hinweis bleibt in der Programmoberfläche).
+
+WHOIS-Referral-Chaining folgt nun generisch allen neu genannten WHOIS-Servern bis zum Ende der Kette; VeriSign wird bevorzugt mit `dom <domain>` abgefragt.
