@@ -15,3 +15,5 @@ WHOIS folgt nun IANA-/Registry-Referrals bis zum Registrar; PDF-Aktenberichte en
 WHOIS-Referral-Chaining folgt nun generisch allen neu genannten WHOIS-Servern bis zum Ende der Kette; VeriSign wird bevorzugt mit `dom <domain>` abgefragt.
 
 WHOIS-Referral-Erkennung ist jetzt tolerant gegenüber Einrückungen, Tabs und unterschiedlichen Feldbezeichnungen; `domain_whois.txt` protokolliert die erkannte Referral-Kette.
+
+Für `.de`-Domains wird zusätzlich die öffentliche DENIC-WebWhois-Auskunft gesichert und ausgewertet (verwaltendes DENIC-Mitglied, Registrierungs-/Aktualisierungsdatum und ggf. öffentlich sichtbare Inhaberdaten).
