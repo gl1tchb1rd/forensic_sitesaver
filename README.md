@@ -92,3 +92,5 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 ## Öffentliche Version
 
 `1.0.0` ist die erste als öffentliche Veröffentlichung vorgesehene Version. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
+
+- `domain_whois.txt` dokumentiert zusätzlich die erkannte WHOIS-Serverkette und die aus jeder Antwort erkannten Referral-Server zur Fehlersuche/Nachvollziehbarkeit
