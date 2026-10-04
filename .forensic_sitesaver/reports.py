@@ -174,6 +174,21 @@ def _compose_report_text(title: str, source_file: Path) -> tuple[str, list[Path]
                 + "\n"
             )
 
+        denic_file = source_file.parent / "denic_webwhois.txt"
+        if denic_file.exists():
+            denic_text = denic_file.read_text(encoding="utf-8", errors="replace").strip()
+            source_files.append(denic_file)
+            text = (
+                text.rstrip()
+                + "\n\n"
+                + "DENIC-WEBWHOIS-DATEN (.DE)\n"
+                + "=" * 72
+                + "\n"
+                + "Quelle: denic_webwhois.txt\n\n"
+                + (denic_text if denic_text else "Keine DENIC-WebWhois-Rohdaten vorhanden.")
+                + "\n"
+            )
+
     if "HAR" in title.upper():
         text = _clean_har_for_pdf(text)
 
