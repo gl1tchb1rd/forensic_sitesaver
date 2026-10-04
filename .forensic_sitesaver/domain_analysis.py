@@ -11,6 +11,7 @@ from typing import Any
 
 import dns.resolver
 import requests
+from bs4 import BeautifulSoup
 
 from common import (
     APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL, USER_AGENT, ensure_dir, hostname_from_value,
@@ -182,6 +183,186 @@ def domain_rdap(domain: str, external_calls: list[dict[str, Any]]) -> dict[str, 
             selected = snap
             break
     return {"query": domain, "attempts": attempts, "selected": selected}
+
+
+
+def _denic_text_lines(html_text: str) -> list[str]:
+    soup = BeautifulSoup(html_text or "", "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    lines: list[str] = []
+    for raw in soup.stripped_strings:
+        line = re.sub(r"\s+", " ", str(raw)).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _find_denic_date(lines: list[str], label: str) -> str | None:
+    date_re = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
+    for idx, line in enumerate(lines):
+        if label.lower() not in line.lower():
+            continue
+        m = date_re.search(line)
+        if m:
+            return m.group(1)
+        for candidate in lines[idx + 1: idx + 6]:
+            m = date_re.search(candidate)
+            if m:
+                return m.group(1)
+    return None
+
+
+def _denic_section(lines: list[str], start: str, end_markers: tuple[str, ...]) -> list[str]:
+    start_idx = None
+    for idx, line in enumerate(lines):
+        if line.strip().lower() == start.lower():
+            start_idx = idx + 1
+            break
+    if start_idx is None:
+        return []
+    end_idx = len(lines)
+    for idx in range(start_idx, len(lines)):
+        low = lines[idx].strip().lower()
+        if any(low == marker.lower() for marker in end_markers):
+            end_idx = idx
+            break
+    return lines[start_idx:end_idx]
+
+
+def _parse_denic_contact_fields(lines: list[str]) -> dict[str, str]:
+    labels = {
+        "name": "name",
+        "adresse": "address",
+        "postleitzahl": "postal_code",
+        "ort": "city",
+        "land": "country",
+        "e-mail": "email",
+        "email": "email",
+        "telefon": "phone",
+    }
+    out: dict[str, str] = {}
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        key = labels.get(line.lower())
+        if key:
+            value = ""
+            if i + 1 < len(lines):
+                nxt = lines[i + 1].strip()
+                if nxt.lower() not in labels:
+                    value = nxt
+                    i += 1
+            if value:
+                out[key] = value
+        else:
+            for label, mapped in labels.items():
+                prefix = label + ":"
+                if line.lower().startswith(prefix):
+                    value = line[len(prefix):].strip()
+                    if value:
+                        out[mapped] = value
+                    break
+        i += 1
+    return out
+
+
+def parse_denic_webwhois(html_text: str, domain: str) -> dict[str, Any]:
+    lines = _denic_text_lines(html_text)
+    joined = "\n".join(lines)
+    low_joined = joined.lower()
+
+    if "ist frei" in low_joined or "available for registration" in low_joined:
+        registration_state = "free"
+    elif "ist bereits registriert" in low_joined or "is already registered" in low_joined:
+        registration_state = "registered"
+    else:
+        registration_state = "unknown"
+
+    member_section = _denic_section(
+        lines,
+        "Informationen zur Domainverwaltung",
+        ("Technische Daten",),
+    )
+    managing_member = _parse_denic_contact_fields(member_section)
+
+    holder_section = _denic_section(
+        lines,
+        "Informationen zum Domaininhaber",
+        ("Hinweis für Domaininhaber", "Hinweis für Dritte", "Informationen zur Domainverwaltung"),
+    )
+    holder_text = "\n".join(holder_section)
+    holder_not_public = (
+        "nicht öffentlich zugänglich" in holder_text.lower()
+        or "not publicly accessible" in holder_text.lower()
+    )
+    if holder_not_public:
+        domain_holder: dict[str, Any] = {
+            "visibility": "not_public_natural_person",
+            "note": "DENIC veröffentlicht die Inhaberdaten dieser Domain nicht öffentlich.",
+        }
+    else:
+        holder_fields = _parse_denic_contact_fields(holder_section)
+        domain_holder = {
+            "visibility": "public" if holder_fields else "unknown",
+            **holder_fields,
+        }
+
+    return {
+        "domain": domain,
+        "registration_state": registration_state,
+        "registration_date": _find_denic_date(lines, "Datum der letzten Registrierung"),
+        "last_update": _find_denic_date(lines, "Letzte Aktualisierung"),
+        "managing_denic_member": managing_member or None,
+        "domain_holder": domain_holder,
+        "source": "DENIC WebWhois",
+    }
+
+
+def denic_webwhois(domain: str, output_dir: Path,
+                    external_calls: list[dict[str, Any]], timeout: int = 10) -> dict[str, Any]:
+    """Öffentliche DENIC-WebWhois-Auskunft für .de-Domains sichern und auswerten."""
+    url = "https://webwhois.denic.de/"
+    external_calls.append({
+        "service": "DENIC WebWhois",
+        "protocol": "HTTPS",
+        "transmitted_data": domain,
+        "purpose": "Öffentliche .de-Domainauskunft einschließlich verwaltendem DENIC-Mitglied",
+    })
+    out: dict[str, Any] = {
+        "source_service": "DENIC WebWhois",
+        "request_url": url,
+        "query": domain,
+        "captured_at": iso_now(),
+    }
+    try:
+        sess = requests.Session()
+        sess.headers.update({
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        })
+        response = sess.get(url, params={"lang": "de", "query": domain}, timeout=timeout)
+        out["http_status"] = response.status_code
+        out["final_url"] = response.url
+        out["ok"] = bool(response.ok)
+        if not response.ok:
+            out["error"] = f"HTTP {response.status_code}"
+            return out
+
+        html_text = response.text
+        parsed = parse_denic_webwhois(html_text, domain)
+        raw_html = output_dir / "denic_webwhois.html"
+        raw_text = output_dir / "denic_webwhois.txt"
+        raw_html.write_text(html_text, encoding="utf-8", errors="replace")
+        text_lines = _denic_text_lines(html_text)
+        write_text(raw_text, "\n".join(text_lines))
+        out["parsed"] = parsed
+        out["raw_html_file"] = raw_html.name
+        out["raw_text_file"] = raw_text.name
+    except Exception as exc:
+        out["ok"] = False
+        out["error"] = safe_exception(exc)
+    return out
 
 
 def whois_query(server: str, query: str, external_calls: list[dict[str, Any]], timeout: int = 7) -> dict[str, Any]:
@@ -515,11 +696,16 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
     dns_data = query_dns(domain, external_calls)
     rdap = domain_rdap(domain, external_calls)
     whois = whois_bundle(domain, external_calls)
+    denic_lookup = denic_webwhois(domain, output_dir, external_calls) if domain.endswith(".de") else None
 
     rdap_selected = (rdap.get("selected") or {}).get("data") if rdap.get("selected") else {}
     if not isinstance(rdap_selected, dict):
         rdap_selected = {}
     registrar = parse_rdap_registrar(rdap_selected) or _registrar_from_whois(whois)
+    denic_parsed = (denic_lookup or {}).get("parsed") if isinstance(denic_lookup, dict) else {}
+    if not isinstance(denic_parsed, dict):
+        denic_parsed = {}
+    denic_member = denic_parsed.get("managing_denic_member") if domain.endswith(".de") else None
     registration_events = rdap_events(rdap_selected)
     ns_values = dns_data.get("records", {}).get("NS", {}).get("values", []) or []
     dns_provider_indicators = infer_dns_providers([str(x) for x in ns_values])
@@ -562,6 +748,7 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
         "tool": APP_NAME, "tool_version": APP_VERSION, "repository": REPOSITORY_URL, "captured_at": iso_now(),
         "input": value, "host": host, "registered_domain": domain,
         "dns": dns_data, "rdap": rdap, "whois": whois, "registrar": registrar,
+        "denic_webwhois": denic_lookup, "denic_managing_member": denic_member,
         "registration_events": registration_events, "dns_provider_indicators": dns_provider_indicators,
         "web_server_ips": web_ips,
         "web_server_ip_details": [ip_cache[ip] for ip in web_ips if ip in ip_cache],
@@ -573,6 +760,8 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
     write_json(output_dir / "domain_analysis.json", result)
     write_json(output_dir / "dns_records.json", dns_data)
     write_json(output_dir / "domain_rdap.json", rdap)
+    if denic_lookup is not None:
+        write_json(output_dir / "denic_webwhois.json", denic_lookup)
     # WHOIS raw text as one readable file.
     whois_lines: list[str] = [
         "WHOIS-VERFOLGUNG",
@@ -637,12 +826,56 @@ def analyze_domain(value: str, output_dir: Path, har_server_ips: list[str] | Non
         f"{APP_NAME} – Domainanalyse", "=" * 72, "",
         f"Version: {APP_VERSION}", f"Projekt / Quellcode: {REPOSITORY_URL}", f"Erstellt: {result['captured_at']}",
         f"Eingabe: {value}", f"Host: {host}", f"Registrierbare Domain: {domain}", "",
-        "REGISTRIERUNG / REGISTRAR", "-" * 72,
-        f"Registrar: {registrar or 'nicht automatisiert ermittelt'}",
-        f"RDAP-Quelle: {((rdap.get('selected') or {}).get('source_service') or 'keine erfolgreiche RDAP-Abfrage')}",
-        f"RDAP-Status: {', '.join(str(x) for x in (rdap_selected.get('status') or [])) or '-'}",
-        f"Registrierungsereignisse: {json.dumps(registration_events, ensure_ascii=False) if registration_events else '-'}",
-        "WHOIS: ergänzende direkte Registry-/Registrar-Abfragen; Rohdaten siehe domain_whois.txt.", "",
+    ]
+
+    if domain.endswith(".de"):
+        member = denic_member if isinstance(denic_member, dict) else {}
+        holder = denic_parsed.get("domain_holder") if isinstance(denic_parsed.get("domain_holder"), dict) else {}
+        lines += [
+            "REGISTRIERUNG / DENIC (.DE)", "-" * 72,
+            "Registry: DENIC eG",
+            f"Verwaltendes DENIC-Mitglied: {member.get('name') or 'nicht aus der öffentlichen DENIC-Auskunft ermittelt'}",
+        ]
+        if member:
+            lines += [
+                f"Anschrift DENIC-Mitglied: {member.get('address') or '-'}; {member.get('postal_code') or ''} {member.get('city') or ''}; {member.get('country') or '-'}".strip(),
+                f"E-Mail DENIC-Mitglied: {member.get('email') or '-'}",
+                f"Telefon DENIC-Mitglied: {member.get('phone') or '-'}",
+            ]
+        lines += [
+            f"Datum der letzten Registrierung (DENIC WebWhois): {denic_parsed.get('registration_date') or '-'}",
+            f"Letzte Aktualisierung (DENIC WebWhois): {denic_parsed.get('last_update') or '-'}",
+        ]
+        if holder.get("visibility") == "not_public_natural_person":
+            lines.append("Domaininhaber: nicht öffentlich; DENIC kennzeichnet den Inhaber als natürliche Person bzw. veröffentlicht dessen Daten nicht.")
+        elif holder.get("visibility") == "public":
+            lines += [
+                f"Öffentlich angezeigter Domaininhaber: {holder.get('name') or '-'}",
+                f"Anschrift Domaininhaber: {holder.get('address') or '-'}; {holder.get('postal_code') or ''} {holder.get('city') or ''}; {holder.get('country') or '-'}".strip(),
+                f"E-Mail Domaininhaber: {holder.get('email') or '-'}",
+                f"Telefon Domaininhaber: {holder.get('phone') or '-'}",
+            ]
+        else:
+            lines.append("Domaininhaber: aus der öffentlichen DENIC-Auskunft nicht automatisiert ermittelt.")
+        lines += [
+            "Quelle: öffentliche DENIC-Domainabfrage (WebWhois); Rohdaten siehe denic_webwhois.txt / denic_webwhois.html.",
+            "Hinweis: Das angezeigte DENIC-Mitglied ist bei Reseller-Konstellationen nicht zwingend der direkte Vertragspartner des Domaininhabers.",
+            f"RDAP-Quelle: {((rdap.get('selected') or {}).get('source_service') or 'keine erfolgreiche RDAP-Abfrage')}",
+            f"RDAP-Status: {', '.join(str(x) for x in (rdap_selected.get('status') or [])) or '-'}",
+            "Klassisches WHOIS: ergänzende Registry-Abfrage; bei .de endet die Referral-Kette regulär bei DENIC.",
+            "",
+        ]
+    else:
+        lines += [
+            "REGISTRIERUNG / REGISTRAR", "-" * 72,
+            f"Registrar: {registrar or 'nicht automatisiert ermittelt'}",
+            f"RDAP-Quelle: {((rdap.get('selected') or {}).get('source_service') or 'keine erfolgreiche RDAP-Abfrage')}",
+            f"RDAP-Status: {', '.join(str(x) for x in (rdap_selected.get('status') or [])) or '-'}",
+            f"Registrierungsereignisse: {json.dumps(registration_events, ensure_ascii=False) if registration_events else '-'}",
+            "WHOIS: ergänzende direkte Registry-/Registrar-Abfragen; Rohdaten siehe domain_whois.txt.", "",
+        ]
+
+    lines += [
         "DNS", "-" * 72,
         "Quelle: lokal/systemseitig konfigurierter DNS-Resolver.",
     ]
