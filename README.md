@@ -106,4 +106,10 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 
 `1.0.0` ist die erste als öffentliche Veröffentlichung vorgesehene Version. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
 
-- `domain_whois.txt` dokumentiert zusätzlich die erkannte WHOIS-Serverkette und die aus jeder Antwort erkannten Referral-Server zur Fehlersuche/Nachvollziehbarkeit
+## geplante Änderungen
+
+Für die nächste Version werden folgende Änderungen geplant:
+Auflistung aller externen Links und E-Mail-Adressen im Auswertungsbericht
+Verbesserung und Fehlebehebung bei der Darstellung von JavaScript-Seiten beim Webseitenspiegel
+
+Verbesserungsvorschläge jederzeit Willkommen
