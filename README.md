@@ -55,6 +55,18 @@ PDF-Aktenberichte werden automatisch erzeugt. Eine eigenständige Domainanalyse 
 
 `PDF-Berichte/` enthält abgeleitete Aktenausfertigungen und ein eigenes Exportmanifest mit SHA-256-Prüfsummen. Bei vollständigen Sicherungen wird dieser Ordner bewusst nicht in `SHA256SUMS.txt` der Primärsicherung aufgenommen, damit ein später dokumentierter Origin-IP-Nachtrag die Primärprüfsummen nicht verändert.
 
+Der Sicherungsvermerk beschreibt den Ablauf in einer eigenen Browsersitzung, die HAR-Aufzeichnung, Screenshots, den abgesicherten lokalen Website-Spiegel und die ergänzenden Analysen. Er nennt den tatsächlichen Beginn der Sicherung, Beginn und Ende der Browseraufzeichnung sowie das Ende der Datenerhebung und Auswertung. PDF-Erstellung und abschließende Prüfsummenbildung erfolgen danach. Seitenzahl, HTTP-Fehlerseiten, Screenshot- und Erfassungsfehler, HAR-Anfragen, gespeicherte Mitschnittgröße und Laufparameter machen den Umfang nachvollziehbar. Die Mitschnittgröße bezeichnet die Größe der gespeicherten HAR-Archive, nicht die übertragene Datenmenge auf Netzwerkebene. Diese Laufdaten werden zusätzlich unter `04_metadaten/Sicherungsstatistik.json` gesichert und in den Primärprüfsummenbestand aufgenommen.
+
+Die erweiterten Angaben werden bei neuen Sicherungen erzeugt. Bereits vorhandene Sicherungsvermerke werden beim PDF-Neuexport unverändert als Quelle verwendet; fehlende historische Laufdaten werden nicht nachträglich ergänzt.
+
+Die Berichterzeugung lässt sich aus dem Repository-Verzeichnis ohne Browser-Downloads oder externe Domainabfragen prüfen:
+
+```bash
+PYTHONPATH=.forensic_sitesaver .forensic_sitesaver/.venv/bin/python -m unittest discover -s .forensic_sitesaver/tests -v
+```
+
+Die Tests verwenden simulierte Browseraufrufe und prüfen die tatsächlich erzeugten HAR-, Berichts-, PDF- und Prüfsummendateien. Für die zusätzliche Textprüfung des PDFs ist `pdftotext` aus Poppler erforderlich; dieser Test wird übersprungen, wenn das Werkzeug fehlt.
+
 ## Sicherheitsmodell
 
 Der Crawler klickt keine Links und sendet keine Formulare. Aktive Navigation erfolgt nur zu zugelassenen HTTP(S)-Zielen. `POST`, `PUT`, `PATCH` und `DELETE` werden blockiert; bekannte zustandsverändernde GET-Muster wie Warenkorb-/Bestell-/Zahlungsaktionen werden ebenfalls blockiert. Eine absolute Nebenwirkungsfreiheit kann technisch nicht garantiert werden, wenn ein fremder Server entgegen HTTP-Konventionen bereits normale GET-Aufrufe als Zustandsänderung missbraucht.

@@ -9,9 +9,11 @@ import mimetypes
 import os
 import re
 import shutil
+import sys
 import time
 import zipfile
 from collections import deque
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -20,7 +22,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 from common import (
-    APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL, ensure_dir, folder_size, hash_tree, hostname_from_value,
+    APP_NAME, APP_VERSION, REPOSITORY_URL, ensure_dir, folder_size, hash_tree, hostname_from_value,
     human_size, is_first_party, is_stateful_get, iso_now, normalize_url, registrable_domain,
     relative_to_case, safe_exception, sanitize_component, sanitize_url, sha256_bytes, sha256_file,
     timestamp_slug, write_csv, write_json, write_text,
@@ -28,7 +30,7 @@ from common import (
 from domain_analysis import analyze_domain
 from har_analysis import analyze_har, discover_har_files, read_har_document
 from tls_capture import capture_tls
-from reports import export_reports
+from reports import export_reports, write_capture_report
 
 ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base"}
 RESOURCE_MIME_PREFIXES = ("image/", "font/", "audio/", "video/", "text/css")
@@ -386,16 +388,21 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
     start_host = hostname_from_value(start_url)
     root_domain = registrable_domain(start_host)
     allow_hosts = [x.lower().strip(".") for x in (allow_hosts or []) if x.strip()]
+    started_at = iso_now()
+    started_monotonic = time.monotonic()
     case_root = ensure_dir(Path(output_root).expanduser().resolve() / f"{timestamp_slug()}_{sanitize_component(start_host)}")
     dirs = {name: ensure_dir(case_root / name) for name in (
         "00_tool", "01_har", "02_website", "03_screenshots", "04_metadaten", "05_infrastruktur",
         "06_har_analyse", "07_domain_analyse", "08_tls_zertifikate",
     )}
-    write_json(dirs["00_tool"] / "tool_info.json", {
-        "tool": APP_NAME, "version": APP_VERSION, "repository": REPOSITORY_URL, "started_at": iso_now(),
+    tool_info = {
+        "tool": APP_NAME, "version": APP_VERSION, "repository": REPOSITORY_URL, "started_at": started_at,
         "start_url": sanitize_url(start_url), "browser": browser_name,
         "max_pages": max_pages, "segment_pages": segment_pages,
-    })
+        "headless": headless, "delay_ms": delay_ms, "timeout_ms": timeout_ms, "allow_hosts": allow_hosts,
+        "python_version": sys.version.split()[0], "playwright_version": version("playwright"),
+    }
+    write_json(dirs["00_tool"] / "tool_info.json", tool_info)
 
     visited: list[dict[str, Any]] = []
     blocked_network: list[dict[str, Any]] = []
@@ -409,6 +416,9 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
     active_segment: Path | None = None
     active_start_page = 1
     segment_no = 0
+    page_capture_errors = 0
+    screenshot_errors = 0
+    screenshots_captured = 0
 
     def navigation_allowed(url: str) -> bool:
         p = urlparse(url)
@@ -418,6 +428,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
     with sync_playwright() as pw:
         browser_type = getattr(pw, browser_name)
         browser = browser_type.launch(headless=headless)
+        tool_info["browser_version"] = browser.version
         context = browser.new_context(service_workers="block", ignore_https_errors=True)
 
         def route_guard(route, request):
@@ -463,6 +474,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                     })
                 active_segment = None
 
+        browser_started_at = iso_now()
         start_segment(1)
         try:
             while queue and (max_pages == 0 or len(visited) < max_pages):
@@ -495,7 +507,9 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                     screenshot_file = dirs["03_screenshots"] / screenshot_name
                     try:
                         page.screenshot(path=str(screenshot_file), full_page=True)
+                        screenshots_captured += 1
                     except Exception as exc:
+                        screenshot_errors += 1
                         write_text(dirs["03_screenshots"] / f"{index:04d}_SCREENSHOT_FEHLER.txt", safe_exception(exc))
                     item = {
                         "index": index, "requested_url": requested, "final_url": final_url, "status": status,
@@ -535,6 +549,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                     if delay_ms:
                         page.wait_for_timeout(delay_ms)
                 except Exception as exc:
+                    page_capture_errors += 1
                     print(f"[Fehler] {sanitize_url(requested)} | {safe_exception(exc)}", flush=True)
                     write_text(dirs["04_metadaten"] / f"seitenfehler_{len(visited)+1:04d}.txt",
                                f"URL: {sanitize_url(requested)}\nFehler: {safe_exception(exc)}")
@@ -549,6 +564,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
             finally:
                 browser.close()
 
+    browser_finished_at = iso_now()
     write_json(dirs["01_har"] / "HAR_Index.json", {"segments": har_index})
     idx_lines = [f"{APP_NAME} – HAR-Index", "", f"Projekt / Quellcode: {REPOSITORY_URL}", f"Segmente: {len(har_index)}", ""]
     for seg in har_index:
@@ -600,24 +616,22 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
         lines.append(f"- {rec.get('service')} | {rec.get('protocol')} | übertragen: {rec.get('transmitted_data')} | Zweck: {rec.get('purpose')}")
     write_text(dirs["04_metadaten"] / "EXTERNE_DIENSTE_UND_DATEN.txt", "\n".join(lines))
 
-    remark = [
-        f"{APP_NAME} – Sicherungsvermerk", "=" * 72, "", f"Projekt / Quellcode: {REPOSITORY_URL}",
-        f"Programmversion: {APP_VERSION}", f"Beginn/Erstellung: {iso_now()}", f"Ausgangs-URL: {sanitize_url(start_url)}",
-        f"Browser: {browser_name}", f"Gesicherte Seiten: {len(visited)}", f"HAR-Segmente: {len(har_index)}", "",
-        "Sicherungsumfang:",
-        "- segmentierte HAR-Aufzeichnung im Modus full mit Response-Inhalten",
-        "- Full-Page-Screenshots",
-        "- lokaler netzwerkgesperrter Website-Spiegel mit lokalisierten Ressourcen",
-        "- HAR-, Domain-/Hosting-/MX- und TLS-Auswertung",
-        "- SHA-256-Prüfsummen", "",
-        "Sicherheitsprinzip:",
-        "Es werden keine Links angeklickt und keine Formulare abgesendet. Aktive Navigation erfolgt ausschließlich per HTTP(S)-GET zu zulässigen First-Party-Zielen. POST/PUT/PATCH/DELETE sowie bekannte Warenkorb-/Bestell-/Zahlungs-GET-Muster werden blockiert.",
-        "Eine absolute Nebenwirkungsfreiheit kann bei fremden Servern nicht garantiert werden, wenn ein Server entgegen HTTP-Konventionen bereits auf einen gewöhnlichen GET-Aufruf Zustandsänderungen ausführt.", "",
-        "Lokaler Website-Spiegel:",
-        "Die HTML-Dateien sind eine sichere Auswertungsfassung aus dem gerenderten DOM. Aktive Inhalte und externe Netzwerkverbindungen werden deaktiviert. Die ursprüngliche Netzwerkkommunikation und Response-Inhalte bleiben in den HAR-Dateien dokumentiert.", "",
-        "DISCLAIMER", "-" * 72, DISCLAIMER,
-    ]
-    write_text(case_root / "Sicherungsvermerk.txt", "\n".join(remark))
+    tool_info.update({
+        "browser_started_at": browser_started_at, "browser_finished_at": browser_finished_at,
+        "finished_at": iso_now(), "duration_seconds": round(time.monotonic() - started_monotonic, 3),
+    })
+    write_json(dirs["00_tool"] / "tool_info.json", tool_info)
+    write_capture_report(case_root, {
+        **tool_info,
+        "pages_captured": len(visited), "page_capture_errors": page_capture_errors,
+        "http_error_pages": sum(1 for item in visited if isinstance(item.get("status"), int) and item["status"] >= 400),
+        "screenshots_captured": screenshots_captured, "screenshot_errors": screenshot_errors,
+        "har_segments": len(har_index), "har_entries": har_result["entries_total"],
+        "har_bytes": sum(segment["size"] for segment in har_index),
+        "mirror_pages": mirror_result["pages"], "mirror_resources": mirror_result["resources"],
+        "blocked_network_requests": len(blocked_network), "blocked_navigation_links": len(blocked_navigation),
+        "external_links_not_followed": len(external_not_followed), "remaining_pages": len(crawl_remaining),
+    })
 
     # Automatische Aktenausfertigungen. PDF-Berichte sind abgeleitete Dateien
     # mit eigenem Exportmanifest und werden nicht in den primären Hashbestand

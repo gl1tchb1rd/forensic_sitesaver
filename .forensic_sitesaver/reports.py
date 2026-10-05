@@ -14,7 +14,124 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 
-from common import APP_NAME, APP_VERSION, REPOSITORY_URL, ensure_dir, iso_now, relative_to_case, sha256_file, write_json, write_text
+from common import APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL, ensure_dir, human_size, iso_now, relative_to_case, sha256_file, write_json, write_text
+
+
+def write_capture_report(case_root: Path, statistics: dict[str, Any]) -> None:
+    """Write the case-file narrative from measured capture data before PDF export."""
+    s = statistics
+    duration = f"{s['duration_seconds']:.1f}".replace(".", ",")
+    page_limit = str(s["max_pages"]) if s["max_pages"] else "unbegrenzt"
+    extra_hosts = ", ".join(s["allow_hosts"]) or "keine"
+    lines = [
+        f"{APP_NAME} – Sicherungsvermerk", "=" * 72, "",
+        "GEGENSTAND DER SICHERUNG",
+        f"Ausgangs-URL: {s['start_url']}",
+        "Gegenstand dieses Vermerks ist die automatisierte technische Sicherung der aufgerufenen Website. "
+        "Dokumentiert werden die während des Sicherungslaufs im Browser erfassten Seiten und deren "
+        "Netzwerkkommunikation. Die Sicherung bildet den beobachteten Zustand innerhalb des angegebenen "
+        "Zeitraums ab; sie stellt keine vollständige Kopie sämtlicher Inhalte des Webservers dar.", "",
+        "BROWSERGESTÜTZTE ERFASSUNG",
+        "Forensic SiteSaver startet über Playwright einen eigenen Browserprozess und legt darin eine neue, "
+        "nicht persistente Browsersitzung an. Persönliche Browserprofile, bestehende Anmeldungen und Cookies "
+        "werden nicht übernommen. Diese Trennung betrifft die Browsersitzung; sie ist keine getrennte "
+        "virtuelle Maschine. Service Worker werden für die Sitzung blockiert.", "",
+        "Ausgehend von der Ausgangsadresse werden die Seiten regulär per HTTP(S) aufgerufen und im Browser "
+        "dargestellt. Auf der Website vorhandenes JavaScript kann dabei ausgeführt werden und Ressourcen "
+        "auch von Drittanbietern anfordern. Nach dem Seitenaufruf wird auf den Ladezustand gewartet, soweit "
+        "dies innerhalb der festgelegten Wartezeiten möglich ist. Aus den Links im dargestellten "
+        "Seiteninhalt werden weitere Adressen ermittelt und nacheinander aufgerufen. Zulässig sind Ziele "
+        "derselben registrierbaren Domain sowie ausdrücklich zusätzlich freigegebene Hosts. "
+        "Links werden nicht angeklickt und Formulare nicht ausgefüllt oder abgesendet.", "",
+        "AUFZEICHNUNG UND BILDSICHERUNG",
+        "Die vom Browser erfassten HTTP-Anfragen und Antworten werden in segmentierten HAR-Dateien "
+        "(HTTP Archive) im Modus full aufgezeichnet. Sie enthalten unter anderem Adressen, Methoden, "
+        "Statuscodes, Header und Zeitinformationen sowie die vom Browser bereitgestellten Response-Inhalte. "
+        "Die Inhalte werden dem jeweiligen HAR-Archiv angehängt. Dies ist eine Aufzeichnung auf "
+        "Browser-/HTTP-Ebene, kein Paketmitschnitt des gesamten Netzwerkverkehrs des Rechners. "
+        "Ein Playwright-Trace wird nicht erstellt.", "",
+        "Für die erfassten Seiten wird der im Browser aufgebaute Seiteninhalt (DOM) gespeichert. "
+        "Zusätzlich wird jeweils ein Screenshot der gesamten Seitenhöhe angefordert. Fehler bei "
+        "Seitenaufrufen oder Screenshots werden gesondert dokumentiert. Auch eine dargestellte HTTP-Fehlerseite "
+        "kann als Seite erfasst sein; die Seitenzahl allein belegt daher keine erfolgreichen HTTP-Antworten.", "",
+        "SICHERHEIT WÄHREND DES AUFRUFS",
+        "Die Sitzung lässt GET-, HEAD- und OPTIONS-Anfragen zu. Andere HTTP-Methoden, insbesondere POST, "
+        "PUT, PATCH und DELETE, werden blockiert. Auch bekannte zustandsverändernde GET-Muster wie "
+        "Warenkorb-, Bestell- und Zahlungsaktionen werden blockiert. Die Sperren können die Darstellung "
+        "und Funktion der Website beeinflussen. Eine absolute Nebenwirkungsfreiheit lässt sich nicht "
+        "garantieren, wenn ein fremder Server bereits gewöhnliche GET-Aufrufe als Zustandsänderung behandelt.", "",
+        "HTTPS-Zertifikatsfehler verhindern den Aufruf in dieser Browsersitzung nicht. "
+        "Der Browseraufruf allein bestätigt daher keine erfolgreiche Prüfung der Zertifikatsvertrauenskette. "
+        "Die gesonderte TLS-Zertifikatserhebung wird im TLS-Bericht dokumentiert.", "",
+        "ABGESICHERTE LOKALE AUSWERTUNGSFASSUNG",
+        "Aus den gespeicherten Seiteninhalten und den erfassten Ressourcen wird ein lokaler Website-Spiegel "
+        "erstellt. JavaScript, Frames und weitere aktive Inhalte werden entfernt oder neutralisiert; "
+        "Formulare werden deaktiviert. Verweise werden auf vorhandene lokale Dateien umgeschrieben "
+        "oder stillgelegt. Eine Content Security Policy unterbindet aktive Inhalte und externe "
+        "Netzwerk-Nachladevorgänge in der lokalen Auswertungsfassung.", "",
+        "Erfasste Bilder, Stylesheets, Fonts und Medien werden, soweit für die lokale Darstellung vorgesehen "
+        "und verfügbar, byteidentisch aus der HAR-Sicherung extrahiert. Für Stylesheets werden zusätzlich "
+        "angepasste Laufzeitkopien erzeugt. Die lokale Darstellung kann deshalb von der ursprünglichen "
+        "interaktiven Website abweichen. Für die ursprüngliche aufgezeichnete HTTP-Kommunikation und "
+        "die enthaltenen Response-Inhalte bleiben die HAR-Dateien die technische Primärquelle.", "",
+        "ERGÄNZENDE AUSWERTUNG UND INTEGRITÄT",
+        "Im Anschluss werden die HAR-Daten automatisiert ausgewertet und ergänzende Domain-, Hosting-, "
+        "MX-/Mailserver- und TLS-Informationen erhoben. Verwendete externe Dienste, übertragene Werte "
+        "und Zwecke sind in den Transparenzdateien dokumentiert. Die Sicherungsdateien werden nicht "
+        "an einen KI- oder Cloud-Analysedienst übertragen.", "",
+        "SHA-256-Prüfsummen werden für die HAR-Segmente und den Primärbestand erzeugt. Sie ermöglichen "
+        "den Vergleich mit einem späteren Dateistand und damit die Erkennung nachträglicher Veränderungen; "
+        "sie bestätigen nicht die sachliche Richtigkeit der Website-Inhalte. Die PDF-Berichte sind "
+        "abgeleitete Aktenausfertigungen mit einem eigenen Exportmanifest. Sie sind vom "
+        "Primärbestand in SHA256SUMS.txt ausgenommen.", "",
+        "ZEITRAUM DER SICHERUNG",
+        f"Beginn der Sicherung: {s['started_at']}",
+        f"Beginn der Browseraufzeichnung: {s['browser_started_at']}",
+        f"Ende der Browseraufzeichnung: {s['browser_finished_at']}",
+        f"Ende der Datenerhebung und Auswertung: {s['finished_at']}",
+        f"Dauer bis zum Ende der Datenerhebung und Auswertung: {duration} Sekunden",
+        "Zeitangaben enthalten den Zeitzonenoffset und beruhen auf der Systemuhr. Die Dauer wird mit "
+        "einer monotonen Uhr gemessen. PDF-Erstellung und abschließende Prüfsummenbildung folgen "
+        "auf die Datenerhebung und Auswertung und sind in dieser Dauer nicht enthalten.", "",
+        "UMFANG UND ERGEBNIS",
+        f"Erfasste Seiten (gespeicherter DOM): {s['pages_captured']}",
+        f"Davon Seiten mit HTTP-Fehlerstatus (ab 400): {s['http_error_pages']}",
+        f"Fehler bei der Seitenerfassung: {s['page_capture_errors']}",
+        f"Gespeicherte Full-Page-Screenshots: {s['screenshots_captured']}",
+        f"Fehler bei der Screenshot-Erstellung: {s['screenshot_errors']}",
+        f"HAR-Segmente: {s['har_segments']}",
+        f"Im HAR dokumentierte Anfragen: {s['har_entries']}",
+        f"Mitschnittgröße (gespeicherte HAR-Segmente): {human_size(s['har_bytes'])} ({s['har_bytes']} Bytes)",
+        "Die Mitschnittgröße ist die Dateigröße der HAR-Archive einschließlich angehängter Inhalte. "
+        "Archivkompression und HAR-Metadaten beeinflussen diese Größe; sie entspricht nicht der "
+        "übertragenen Datenmenge auf Netzwerkebene.",
+        f"Seiten in der lokalen Auswertungsfassung: {s['mirror_pages']}",
+        f"Lokal extrahierte Ressourcen: {s['mirror_resources']}",
+        f"Blockierte Netzwerkanfragen: {s['blocked_network_requests']}",
+        f"Blockierte Navigationslinks: {s['blocked_navigation_links']}",
+        f"Nicht weiterverfolgte externe Adressen: {s['external_links_not_followed']}",
+        f"Bei Erreichen des Seitenlimits noch vorgemerkte Adressen: {s['remaining_pages']}", "",
+        "PROGRAMM UND LAUFPARAMETER",
+        f"Programm: {APP_NAME} {APP_VERSION}",
+        f"Projekt / Quellcode: {REPOSITORY_URL}",
+        f"Python-Version: {s['python_version']}",
+        f"Playwright-Version: {s['playwright_version']}",
+        f"Browser: {s['browser']} {s['browser_version']}",
+        f"Browser ohne sichtbares Fenster (headless): {'ja' if s['headless'] else 'nein'}",
+        f"Seitenlimit: {page_limit}",
+        f"Seiten je HAR-Segment: {s['segment_pages']}",
+        f"Pause zwischen Seitenaufrufen: {s['delay_ms']} ms",
+        f"Navigationszeitlimit je Seitenaufruf: {s['timeout_ms']} ms",
+        f"Zusätzlich freigegebene Hosts: {extra_hosts}", "",
+        "ABLAGE UND PRÜFBARKEIT",
+        "Die messbaren Laufdaten sind zusätzlich in 04_metadaten/Sicherungsstatistik.json gespeichert. "
+        "Die Seitenliste liegt in 04_metadaten/visited_pages.json, die HAR-Segmentliste in "
+        "01_har/HAR_Index.json. Blockierte Anfragen, nicht weiterverfolgte Links, verbleibende Adressen "
+        "und etwaige Fehler sind in den zugehörigen Metadaten und Fehlerdateien dokumentiert.", "",
+        "DISCLAIMER", "-" * 72, DISCLAIMER,
+    ]
+    write_json(case_root / "04_metadaten" / "Sicherungsstatistik.json", statistics)
+    write_text(case_root / "Sicherungsvermerk.txt", "\n".join(lines))
 
 
 def _is_inside(child: Path, parent: Path) -> bool:

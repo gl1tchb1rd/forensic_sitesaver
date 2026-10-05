@@ -1,5 +1,11 @@
 # Changelog
 
+## Noch nicht veröffentlicht
+
+- Ausführlicher Sicherungsvermerk mit Beschreibung von Browsersitzung, HAR-Aufzeichnung, Screenshots, lokalem Website-Spiegel und ergänzenden Auswertungen.
+- Tatsächlicher Sicherungsbeginn, Beginn und Ende der Browseraufzeichnung, Abschluss der Datenerhebung und Auswertung sowie gemessene Dauer.
+- Kennzahlen zu Seiten, HTTP-Fehlerseiten, Screenshots, Erfassungsfehlern, gespeicherter HAR-Datenmenge, verbleibenden Adressen und Laufparametern; zusätzliche `Sicherungsstatistik.json` im Primärbestand.
+
 ## 1.0.0
 
 Erste öffentliche Veröffentlichung von **Forensic SiteSaver**.
