@@ -130,6 +130,90 @@ class OfflineMenuTests(unittest.TestCase):
 
 
 class OfflineMenuBrowserTests(BrowserTestCase):
+    def test_wordpress_hover_keeps_submenu_links_click_and_touch_usable(self):
+        # Newsup/SmartMenus structure from the supplied Feuerwehr DOM. The
+        # original CSS hover rule must remain usable with the local controller.
+        markup = """
+        <style>
+          .navbar-wp .dropdown-menu {display:none}
+          .navbar-wp .dropdown:hover > .dropdown-menu {display:block}
+        </style>
+        <nav class="navbar-wp"><ul>
+          <li class="menu-item-has-children dropdown" id="about-region">
+            <a id="about" href="../next" aria-haspopup="true" aria-controls="about-menu" aria-expanded="false">Über uns</a>
+            <ul id="about-menu" class="dropdown-menu" role="group" aria-hidden="true">
+              <li><a id="about-child" href="../next#details">Feuerwehrhaus</a></li>
+            </ul>
+          </li>
+          <li class="dropdown" id="fragment-region">
+            <a id="fragment" href="#" data-toggle="dropdown" aria-expanded="false">More</a>
+            <ul class="dropdown-menu" id="fragment-menu"><li><a href="../next">Next</a></li></ul>
+          </li>
+        </ul></nav><div id="hover-outside">Outside</div>
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            visited = make_case(root)
+            raw = root / visited[0]["raw_dom_relative"]
+            raw.write_text(raw.read_text().replace("</body>", markup + "</body>"), encoding="utf-8")
+            original = raw.read_bytes()
+            build_local_mirror(root, visited)
+            website = root / "02_website"
+            server = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(QuietHandler, directory=str(website)))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for entry in [(website / "seiten/1.html").as_uri(), f"http://127.0.0.1:{server.server_port}/seiten/1.html"]:
+                    with self.subTest(entry=entry):
+                        context = self.browser.new_context(viewport={"width": 1200, "height": 900}, service_workers="block")
+                        page = context.new_page()
+                        external = []
+                        page.on("request", lambda req: external.append(req.url)
+                                if urlparse(req.url).scheme in {"http", "https"} and urlparse(req.url).hostname != "127.0.0.1" else None)
+                        page.goto(entry)
+                        self.assertFalse(page.locator("#about-menu").is_visible())
+                        self.assertEqual(page.locator("#about").get_attribute("href"), "2.html")
+                        page.locator("#about").hover()
+                        self.assertTrue(page.locator("#about-menu").is_visible())
+                        self.assertEqual(page.locator("#about-menu").get_attribute("aria-hidden"), "false")
+                        page.locator("#about-child").hover()
+                        self.assertTrue(page.locator("#about-menu").is_visible())
+                        page.locator("#hover-outside").hover()
+                        self.assertFalse(page.locator("#about-menu").is_visible())
+                        button = page.locator(f'#about + button[{PREFIX}controls]')
+                        button.focus()
+                        button.press("Enter")
+                        self.assertTrue(page.locator("#about-menu").is_visible())
+                        button.press("Escape")
+                        self.assertFalse(page.locator("#about-menu").is_visible())
+                        page.locator("#fragment").click()
+                        self.assertTrue(page.locator("#fragment-menu").is_visible())
+                        page.locator("#fragment").click()
+                        self.assertFalse(page.locator("#fragment-menu").is_visible())
+                        page.locator("#about").hover()
+                        page.locator("#about-child").click()
+                        page.wait_for_url("**/2.html#details")
+                        self.assertEqual(external, [])
+                        context.close()
+                # Touch users keep the explicit arrow button; the parent link
+                # remains a normal local page link, without mouse-only behavior.
+                context = self.browser.new_context(viewport={"width": 480, "height": 900}, is_mobile=True, has_touch=True)
+                page = context.new_page()
+                page.goto((website / "seiten/1.html").as_uri())
+                button = page.locator(f'#about + button[{PREFIX}controls]')
+                button.tap()
+                self.assertTrue(page.locator("#about-menu").is_visible())
+                button.tap()
+                self.assertFalse(page.locator("#about-menu").is_visible())
+                page.locator("#about").tap()
+                page.wait_for_url("**/2.html")
+                context.close()
+                self.assertEqual(raw.read_bytes(), original)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
     def test_file_and_http_menus_keyboard_resize_navigation_and_csp(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
