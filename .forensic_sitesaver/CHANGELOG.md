@@ -2,6 +2,7 @@
 
 ## Noch nicht veröffentlicht
 
+- Die zusätzlich eingefügten Untermenü-Pfeilknöpfe entfallen, damit die Offline-Ansicht das ursprüngliche Menü ohne zusätzliche Menüzeile darstellt. Maus, Touch und Tastatur bedienen die vorhandenen Menülinks und Schalter. Touch öffnet beim ersten Antippen das Untermenü und folgt beim zweiten dem Seitenziel; Pfeil nach unten/Leertaste öffnen das Untermenü per Tastatur, Enter folgt dem Link. Gesperrte Linkziele behalten ihren Hinweisdialog, ohne das Öffnen eines Untermenüs zu verhindern.
 - Die vollständige Vorschauerstellung aus K25-SiteSaver v1.5 ersetzt den bisherigen Erstellungsweg: Ressourcenextraktion, CSS-Laufzeitkopien, HTML-Lokalisierung, Index und Prüfung der fertigen Ansicht sind als `website_mirror.py` übernommen und an Version 1.1 angebunden. Menüs, Linkziel-Dialoge, Diagnoseformate, passive SVG-Bilder und unveränderte Primärdaten bleiben erhalten; gemeinsame HAR-/URL-/CSS-Hilfen sind in `mirror_support.py` ausgelagert.
 - Tatsächlich gespeicherte Bildinhalte aus HTTP-304-Antworten werden wieder angezeigt; leere Cache-Antworten bleiben als fehlender Inhalt diagnostiziert. Der K25-Reader überspringt ungültige HAR-Dokumentkandidaten. Lokale Bildvarianten bleiben vom Browser auswählbar, und aufgezeichnete passive Ressourcen sind wie in K25 direkt verlinkt.
 - Zusätzliche Chromium-Tests prüfen echte JPEG-Daten, Datei-/HTTP-Ansichten, unterschiedliche Bildschirmbreiten, Menüs, lokale Bildlinks, unveränderte Primärdaten und die Prüfung freigegebener Controller.

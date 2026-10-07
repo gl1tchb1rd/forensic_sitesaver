@@ -24,7 +24,7 @@ from test_local_mirror import BrowserTestCase, QuietHandler, make_case
 
 MENU_HTML = """
 <style>
- .dropdown-menu, #keyboard-menu, .navbar-collapse {display:none}
+ .dropdown-menu, .sub-menu, #keyboard-menu, .navbar-collapse {display:none}
  #mobile-nav {display:none; visibility:hidden; transform:translateX(-100%);opacity:0;max-height:0}
  @media (min-width:768px) { #hamburger {display:none} #mobile-nav {display:block;visibility:visible;transform:none;opacity:1;max-height:none} }
 </style>
@@ -99,15 +99,21 @@ class OfflineMenuTests(unittest.TestCase):
                 self.assertFalse(soup.select_one(selector).has_attr(PREFIX + "controls"), selector)
             self.assertFalse(soup.select_one("#foreign-fragment").has_attr(PREFIX + "controls"))
             self.assertEqual(soup.select_one("#products")["href"], "2.html")
-            button = soup.select_one(f'button[{PREFIX}controls][aria-controls="products-menu"]')
-            self.assertIsNotNone(button)
-            self.assertEqual(button["type"], "button")
+            products = soup.select_one(f'#products[{PREFIX}controls][aria-controls="products-menu"]')
+            self.assertIsNotNone(products)
+            self.assertEqual(products[PREFIX + "navigation-link"], "true")
+            self.assertIsNone(soup.select_one(f'button[{PREFIX}controls][aria-controls="products-menu"]'))
+            original_soup = BeautifulSoup(raw, "html.parser")
+            self.assertEqual(len(soup.select("#mobile-nav button")), len(original_soup.select("#mobile-nav button")))
+            self.assertEqual(len(soup.select("#mobile-nav a")), len(original_soup.select("#mobile-nav a")))
             self.assertIsNone(soup.find(attrs={"onclick": True}))
             manifest = json.loads((root / "02_website/menue_manifest.json").read_text())
             self.assertEqual(len(manifest["pages"][0]["menus"]), 7)
-            wp_button = soup.select_one(f'#wordpress-link + button[{PREFIX}controls]')
-            self.assertIsNotNone(wp_button)
-            self.assertTrue(wp_button["aria-controls"].startswith("forensic-sitesaver-menu-"))
+            wp_link = soup.select_one(f'#wordpress-link[{PREFIX}controls]')
+            self.assertIsNotNone(wp_link)
+            self.assertTrue(wp_link["aria-controls"].startswith("forensic-sitesaver-menu-"))
+            self.assertEqual(wp_link["href"], "2.html")
+            self.assertFalse(any(menu["separate_button"] for menu in manifest["pages"][0]["menus"]))
             self.assertEqual((root / visited[0]["raw_dom_relative"]).read_bytes(), raw)
             # Pages with no recognized menus still forbid all script execution.
             plain = BeautifulSoup((root / "02_website/seiten/2.html").read_text(), "html.parser")
@@ -180,12 +186,15 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                         self.assertTrue(page.locator("#about-menu").is_visible())
                         page.locator("#hover-outside").hover()
                         self.assertFalse(page.locator("#about-menu").is_visible())
-                        button = page.locator(f'#about + button[{PREFIX}controls]')
-                        button.focus()
-                        button.press("Enter")
+                        link = page.locator(f'#about[{PREFIX}controls]')
+                        self.assertEqual(page.locator('#about + button').count(), 0)
+                        link.focus()
+                        link.press("ArrowDown")
                         self.assertTrue(page.locator("#about-menu").is_visible())
-                        button.press("Escape")
+                        self.assertTrue(page.locator('#about-child').evaluate('e => e === document.activeElement'))
+                        page.locator('#about-child').press("Escape")
                         self.assertFalse(page.locator("#about-menu").is_visible())
+                        self.assertTrue(link.evaluate('e => e === document.activeElement'))
                         page.locator("#fragment").click()
                         self.assertTrue(page.locator("#fragment-menu").is_visible())
                         page.locator("#fragment").click()
@@ -195,17 +204,25 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                         page.wait_for_url("**/2.html#details")
                         self.assertEqual(external, [])
                         context.close()
-                # Touch users keep the explicit arrow button; the parent link
-                # remains a normal local page link, without mouse-only behavior.
+                # Touch uses the same original link: first tap opens the menu,
+                # a tap on the submenu follows its destination, and a second
+                # tap on the original link follows the parent page.
                 context = self.browser.new_context(viewport={"width": 480, "height": 900}, is_mobile=True, has_touch=True)
                 page = context.new_page()
                 page.goto((website / "seiten/1.html").as_uri())
-                button = page.locator(f'#about + button[{PREFIX}controls]')
-                button.tap()
+                link = page.locator(f'#about[{PREFIX}controls]')
+                link.tap()
                 self.assertTrue(page.locator("#about-menu").is_visible())
-                button.tap()
-                self.assertFalse(page.locator("#about-menu").is_visible())
-                page.locator("#about").tap()
+                self.assertTrue(page.url.endswith('/1.html'))
+                page.locator('#about-child').tap()
+                page.wait_for_url("**/2.html#details")
+                page.goto((website / "seiten/1.html").as_uri())
+                link.tap()
+                link.tap()
+                page.wait_for_url("**/2.html")
+                page.goto((website / "seiten/1.html").as_uri())
+                link.focus()
+                link.press("Enter")
                 page.wait_for_url("**/2.html")
                 context.close()
                 self.assertEqual(raw.read_bytes(), original)
@@ -213,6 +230,33 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join()
+
+    def test_touch_menu_with_blocked_parent_link_opens_before_showing_link_dialog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            visited = menu_case(root)
+            raw = root / visited[0]["raw_dom_relative"]
+            soup = BeautifulSoup(raw.read_text(), "html.parser")
+            soup.select_one('#wordpress-link')['href'] = 'https://external.invalid/menu'
+            raw.write_text(str(soup))
+            build_local_mirror(root, visited)
+            context = self.browser.new_context(viewport={"width": 480, "height": 900}, is_mobile=True, has_touch=True)
+            page = context.new_page()
+            external = []
+            page.on('request', lambda request: external.append(request.url)
+                    if urlparse(request.url).scheme in {'http', 'https'} else None)
+            page.goto((root / '02_website/seiten/1.html').as_uri())
+            link = page.locator('#wordpress-link')
+            panel = page.locator('[id="' + link.get_attribute('aria-controls') + '"]')
+            self.assertFalse(panel.is_visible())
+            link.tap()
+            self.assertTrue(panel.is_visible())
+            self.assertFalse(page.get_by_role('dialog').is_visible())
+            link.tap()
+            self.assertTrue(page.get_by_role('dialog').is_visible())
+            self.assertEqual(page.get_by_role('dialog').locator('textarea').input_value(), 'https://external.invalid/menu')
+            self.assertEqual(external, [])
+            context.close()
 
     def test_file_and_http_menus_keyboard_resize_navigation_and_csp(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -255,8 +299,9 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                         self.assertTrue(page.locator("#mobile-nav").is_visible())
                         self.assertEqual(page.locator("#hamburger").get_attribute("aria-expanded"), "true")
                         self.assertEqual(page.locator("#mobile-nav").evaluate("panel => getComputedStyle(panel).transform"), "none")
-                        products = page.locator(f'button[{PREFIX}controls][aria-controls="products-menu"]')
-                        products.click()
+                        products = page.locator(f'#products[{PREFIX}controls][aria-controls="products-menu"]')
+                        products.focus()
+                        products.press(" ")
                         self.assertTrue(page.locator("#products-menu").is_visible())
                         page.locator("#nested-toggle").click()
                         self.assertTrue(page.locator("#nested-menu").is_visible())
@@ -275,8 +320,9 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                         self.assertTrue(page.locator("#keyboard-menu").is_visible())
                         page.locator("#keyboard-toggle").press(" ")
                         self.assertFalse(page.locator("#keyboard-menu").is_visible())
-                        wordpress = page.locator(f'#wordpress-link + button[{PREFIX}controls]')
-                        wordpress.click()
+                        wordpress = page.locator(f'#wordpress-link[{PREFIX}controls]')
+                        wordpress.focus()
+                        wordpress.press(" ")
                         wp_panel = page.locator('[id="' + wordpress.get_attribute("aria-controls") + '"]')
                         self.assertTrue(wp_panel.is_visible())
                         wordpress.press("Escape")
@@ -305,7 +351,8 @@ class OfflineMenuBrowserTests(BrowserTestCase):
                         self.assertFalse(page.evaluate("url => fetch(url).then(() => true).catch(() => false)",
                                                        f"http://127.0.0.1:{server.server_port}/index.html"))
                         page.locator("#hamburger").click()
-                        products.click()
+                        products.focus()
+                        products.press(" ")
                         page.locator("#products").click()
                         page.wait_for_url("**/2.html")
                         self.assertEqual(page.locator("h1").inner_text(), "Next page")

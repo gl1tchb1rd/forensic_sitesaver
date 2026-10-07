@@ -23,8 +23,8 @@ PANEL_SELECTOR = ".dropdown-menu, .sub-menu, .submenu, [role=menu]"
 def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> dict[str, Any]:
     """Annotate only recognized controls and panels, never executable site data.
 
-    Real navigation anchors retain their destination and receive a separate
-    submenu button. No form control is promoted to an interactive menu.
+    Existing navigation anchors retain their destination and also control the
+    submenu. No extra buttons or menus are inserted into the captured markup.
     """
     for tag in soup.find_all(True):
         for attr in list(tag.attrs):
@@ -118,22 +118,16 @@ def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> 
                         or (urldefrag(resolved)[0] == urldefrag(page_url)[0]
                             and urlparse(resolved).fragment == panel["id"]))
         trigger = control
-        if control.name == "a" and not local_toggle:
-            trigger = soup.new_tag("button", type="button")
-            trigger.string = "▾"
-            trigger["aria-label"] = f"Untermenü: {label}"
-            trigger["style"] = "font:inherit;cursor:pointer;margin-inline-start:.3em"
-            trigger["aria-expanded"] = str(control.get("aria-expanded") or "false")
-            for attr in ("aria-expanded", "aria-controls", "aria-haspopup"):
-                control.attrs.pop(attr, None)
-            control.insert_after(trigger)
+        navigation_link = control.name == "a" and not local_toggle
+        if navigation_link:
+            trigger[PREFIX + "navigation-link"] = "true"
         else:
             trigger.attrs.pop("href", None)
             trigger.attrs.pop("xlink:href", None)
         trigger[PREFIX + "controls"] = key
         trigger["aria-controls"] = panel["id"]
         # Keep the familiar hover area of a navigation link and its direct
-        # submenu. The separate button remains available for touch/keyboard.
+        # submenu. The same link remains available for touch and keyboard.
         hover = (control.name == "a" and panel.parent is control.parent
                  and bool(set(panel.get("class", [])) & {"dropdown-menu", "sub-menu", "submenu"})
                  and isinstance(control.parent, Tag)
@@ -145,11 +139,11 @@ def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> 
             trigger["type"] = "button"
             for attr in ("form", "formaction", "formmethod", "formenctype", "formtarget"):
                 trigger.attrs.pop(attr, None)
-        else:
+        elif not navigation_link:
             trigger["role"] = "button"
             trigger["tabindex"] = "0"
         menus.append({"panel_id": panel["id"], "label": label, "recognition": method,
-                      "separate_button": trigger is not control, "hover": hover})
+                      "separate_button": False, "navigation_link": navigation_link, "hover": hover})
     return {"menus": menus, "unresolved": unresolved}
 
 
