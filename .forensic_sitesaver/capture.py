@@ -41,13 +41,43 @@ from offline_links import (
 ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base",
                "animate", "animatemotion", "animatetransform", "set"}
 RESOURCE_MIME_PREFIXES = ("image/", "font/", "audio/", "video/", "text/css")
-CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.I)
-CSS_IMPORT_RE = re.compile(r"@import\s+(['\"])(.*?)\1", re.I)
+CSS_STRING = r'"(?:\\[\s\S]|[^"\\])*"' + r"|'(?:\\[\s\S]|[^'\\])*'"
+CSS_TOKEN_RE = re.compile(
+    rf"(?P<comment>/\*.*?\*/)|(?P<string>{CSS_STRING})|"
+    r"(?P<function>[-\w]+)\(|(?P<open>\()|(?P<close>\))|(?P<import>@import\b)", re.I | re.S)
+CSS_URL_ARGUMENT_RE = re.compile(rf"\s*(?P<value>{CSS_STRING}|(?:\\[\s\S]|[^)\"'])*?)\s*\)", re.S)
 
 
 def _url_without_fragment(url: str) -> str:
     p = urlparse(url)
     return urlunparse((p.scheme, p.netloc, p.path or "/", p.params, p.query, ""))
+
+
+def _resource_key(url: str) -> str:
+    """Match browser-encoded URLs without discarding query strings or decoding slashes."""
+    p = urlparse(_url_without_fragment(url))
+    def encoded(value: str, safe: str) -> str:
+        return re.sub(r"%[0-9a-fA-F]{2}", lambda m: m[0].upper(), quote(value, safe=safe))
+    return urlunparse((p.scheme, p.netloc, encoded(p.path, "/:@!$&'()*+,;=-._~%"),
+                       encoded(p.params, ":@!$&'()*+,;=-._~%"),
+                       encoded(p.query, "/?:@!$&'()*+,;=-._~%"), ""))
+
+
+def _css_unescape(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        token = match[1]
+        if re.match(r"[0-9a-fA-F]", token):
+            codepoint = int(token.strip(), 16)
+            return chr(codepoint) if 0 < codepoint <= 0x10FFFF and not 0xD800 <= codepoint <= 0xDFFF else "\ufffd"
+        return "" if token in {"\n", "\r", "\r\n", "\f"} else token
+    return re.sub(r"\\([0-9a-fA-F]{1,6}[ \t\r\n\f]?|\r\n|[\s\S])", replace, value)
+
+
+def _css_quoted(value: str) -> str:
+    value = value.replace("\\", "\\\\").replace('"', '\\"')
+    for character, escaped in (("\n", r"\a "), ("\r", r"\d "), ("\f", r"\c ")):
+        value = value.replace(character, escaped)
+    return '"' + value + '"'
 
 
 def _page_slug(url: str, index: int) -> str:
@@ -146,6 +176,46 @@ def _image_sources(page: Any) -> list[str]:
     return []
 
 
+def _load_lazy_images(page: Any, timeout_ms: int) -> dict[str, Any]:
+    """Visit image positions while HAR is active; restore the original viewport."""
+    try:
+        result = page.evaluate(r'''async budget => {
+            const deadline = performance.now() + Math.max(0, budget - 120);
+            const original = {x: scrollX, y: scrollY};
+            const candidates = Array.from(document.images).filter(image =>
+                (image.loading === 'lazy' && !image.naturalWidth) ||
+                ['data-src', 'data-lazy-src', 'data-original', 'data-srcset'].some(name => image.hasAttribute(name)));
+            const initiallyLoaded = new Set(candidates.filter(image => image.naturalWidth > 0));
+            const positions = [...new Set(candidates.filter(image => image.getClientRects().length)
+                .map(image => Math.max(0, image.getBoundingClientRect().top + scrollY - innerHeight / 2)))];
+            let visited = 0;
+            const pause = () => new Promise(resolve => setTimeout(resolve, Math.min(120, Math.max(0, deadline - performance.now()))));
+            try {
+                for (const top of positions.slice(0, 40)) {
+                    if (performance.now() >= deadline) break;
+                    window.scrollTo({left: original.x, top, behavior: 'instant'});
+                    visited++;
+                    await pause();
+                }
+                while (visited && candidates.some(image => !image.complete) && performance.now() < deadline) await pause();
+            } finally {
+                if (visited) {
+                    window.scrollTo({left: original.x, top: original.y, behavior: 'instant'});
+                    // Give IntersectionObserver/scroll handlers time to restore the initial view.
+                    await new Promise(resolve => setTimeout(resolve, 120));
+                }
+            }
+            return {candidate_images: candidates.length, positions_visited: visited,
+                loaded_images: candidates.filter(image => image.naturalWidth > 0 && !initiallyLoaded.has(image)).length,
+                limited: visited < positions.length || candidates.some(image => !image.complete)};
+        }''', max(0, min(timeout_ms, 8000)))
+        if isinstance(result, dict):
+            return result
+    except Exception as exc:
+        return {"error": safe_exception(exc)}
+    return {}
+
+
 def _rewrite_css(css_text: str, css_url: str, css_runtime_file: Path,
                  url_map: dict[str, dict[str, Any]], runtime_css_map: dict[str, Path],
                  missing_references: list[dict[str, str]] | None = None) -> str:
@@ -153,15 +223,15 @@ def _rewrite_css(css_text: str, css_url: str, css_runtime_file: Path,
         if missing_references is not None:
             missing_references.append({"page": css_runtime_file.name, "kind": kind, "url": url})
 
-    def resolve_resource(raw: str) -> str:
-        raw = raw.strip().strip('"\'')
+    def resolve_resource(raw: str, kind: str = "css-url") -> str:
+        raw = raw.strip()
         if not raw or raw.lower().startswith("data:") or raw.startswith("#"):
             return raw
         resolved = urljoin(css_url, raw)
-        absolute = _url_without_fragment(resolved)
+        absolute = _resource_key(resolved)
         rec = url_map.get(absolute)
-        if not rec:
-            missing(resolved, "css-url")
+        if not rec or (kind == "css-import" and absolute not in runtime_css_map):
+            missing(resolved, kind)
             return "data:,"
         target = runtime_css_map.get(absolute) or rec.get("local_path")
         if not target:
@@ -169,21 +239,45 @@ def _rewrite_css(css_text: str, css_url: str, css_runtime_file: Path,
         fragment = urlparse(resolved).fragment
         return _rel_link(css_runtime_file, target) + ("#" + fragment if fragment else "")
 
-    def repl_url(m: re.Match[str]) -> str:
-        return f'url("{resolve_resource(m.group(2))}")'
-
-    def repl_import(m: re.Match[str]) -> str:
-        raw = m.group(2).strip()
-        absolute = _url_without_fragment(urljoin(css_url, raw))
-        target = runtime_css_map.get(absolute)
-        if not target:
-            missing(absolute, "css-import")
-            return "/* Forensic SiteSaver: externer/fehlender @import blockiert */"
-        return f'@import "{_rel_link(css_runtime_file, target)}"'
-
-    # Quoted imports retain quotes; url() imports go through resolve_resource,
-    # which selects the derived CSS copy rather than the untouched original.
-    return CSS_URL_RE.sub(repl_url, CSS_IMPORT_RE.sub(repl_import, css_text))
+    # Tokenize strings/comments first so content:"url(...)" stays text and
+    # quoted URLs may contain parentheses. image-set permits bare strings.
+    output: list[str] = []
+    functions: list[str] = []
+    position = 0
+    expect_import = False
+    while match := CSS_TOKEN_RE.search(css_text, position):
+        gap = css_text[position:match.start()]
+        output.append(gap)
+        if gap.strip():
+            expect_import = False
+        token = match[0]
+        position = match.end()
+        if match.lastgroup == "import":
+            expect_import = True
+        elif match.lastgroup == "function":
+            name = match["function"].lower()
+            if name == "url" and (argument := CSS_URL_ARGUMENT_RE.match(css_text, position)):
+                raw = argument["value"].strip()
+                if raw[:1] in {'"', "'"}:
+                    raw = raw[1:-1]
+                token = 'url(' + _css_quoted(resolve_resource(_css_unescape(raw),
+                    "css-import" if expect_import else "css-url")) + ')'
+                position = argument.end()
+            else:
+                functions.append(name)
+            expect_import = False
+        elif match.lastgroup == "string":
+            if expect_import or (functions and functions[-1] in {"image-set", "-webkit-image-set"}):
+                token = _css_quoted(resolve_resource(_css_unescape(token[1:-1]),
+                    "css-import" if expect_import else "css-image-set"))
+            expect_import = False
+        elif match.lastgroup == "open":
+            functions.append("")
+        elif match.lastgroup == "close" and functions:
+            functions.pop()
+        output.append(token)
+    output.append(css_text[position:])
+    return "".join(output)
 
 
 def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
@@ -197,6 +291,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
     url_map: dict[str, dict[str, Any]] = {}
     manifest_rows: list[dict[str, Any]] = []
     redirects: dict[str, str] = {}
+    resource_issues: dict[str, dict[str, Any]] = {}
     missing_references: list[dict[str, str]] = []
 
     # Extract safe-to-view resources byte-identically. HAR remains the source for everything else.
@@ -211,25 +306,30 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             raw_url = str(req.get("url") or "")
             if urlparse(raw_url).scheme not in {"http", "https"}:
                 continue
-            url = _url_without_fragment(raw_url)
+            url = _resource_key(raw_url)
             if url in url_map:
                 continue
             status = int(resp.get("status") or 0)
             if 300 <= status < 400 and resp.get("redirectURL"):
-                redirects[url] = _url_without_fragment(urljoin(url, resp["redirectURL"]))
+                redirects[url] = _resource_key(urljoin(raw_url, resp["redirectURL"]))
+                resource_issues[url] = {"reason": "redirect_target_not_archived", "http_status": status}
                 continue
             if not 200 <= status < 300:
+                resource_issues[url] = {"reason": "http_error" if status else "no_response", "http_status": status}
                 continue
             content = resp.get("content") or {}
             headers = {str(h.get("name") or "").lower(): str(h.get("value") or "")
                        for h in resp.get("headers") or []}
             mime = str(content.get("mimeType") or headers.get("content-type") or "").split(";", 1)[0].lower().strip()
             if mime in {"", "application/octet-stream"}:
-                mime = mimetypes.guess_type(urlparse(url).path)[0] or mime
+                header_mime = headers.get("content-type", "").split(";", 1)[0].lower().strip()
+                mime = header_mime if _safe_resource_mime(header_mime) else mimetypes.guess_type(urlparse(url).path)[0] or mime
             if not _safe_resource_mime(mime):
+                resource_issues[url] = {"reason": "unsupported_mime", "http_status": status, "mime": mime}
                 continue
             body = _har_body(segment, content)
             if body is None:
+                resource_issues[url] = {"reason": "response_body_missing", "http_status": status, "mime": mime}
                 continue
             rel = _resource_relpath(url, mime, body)
             out = resources_dir / rel
@@ -239,7 +339,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             if not out.exists():
                 out.write_bytes(body)
             rec = {
-                "original_url": url, "mime": mime, "http_status": resp.get("status"),
+                "original_url": _url_without_fragment(raw_url), "mime": mime, "http_status": resp.get("status"),
                 "size": len(body), "sha256": sha256_bytes(body),
                 "local_path": out, "local_relative": out.relative_to(website).as_posix(),
                 "har_segment": segment.name, "byte_preserved": True,
@@ -261,13 +361,13 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
     runtime_css_map: dict[str, Path] = {}
     for url, rec in url_map.items():
         if rec.get("mime") == "text/css":
-            target = runtime_css_dir / (hashlib.sha256(url.encode()).hexdigest()[:16] + ".css")
+            target = runtime_css_dir / (hashlib.sha256(rec["original_url"].encode()).hexdigest()[:16] + ".css")
             runtime_css_map[url] = target
     for url, target in runtime_css_map.items():
         rec = url_map[url]
         try:
             original = rec["local_path"].read_text(encoding="utf-8", errors="replace")
-            rewritten = _rewrite_css(original, url, target, url_map, runtime_css_map, missing_references)
+            rewritten = _rewrite_css(original, rec["original_url"], target, url_map, runtime_css_map, missing_references)
             write_text(target, rewritten)
         except Exception:
             write_text(target, "/* CSS konnte nicht für die sichere Laufzeitfassung verarbeitet werden. */")
@@ -295,7 +395,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             base_url = urljoin(base_url, str(base["href"]))
 
         for img, selected in zip(soup.find_all("img"), item.get("image_sources") or []):
-            if selected and (selected.lower().startswith("data:") or _url_without_fragment(selected) in url_map):
+            if selected and (selected.lower().startswith("data:") or _resource_key(selected) in url_map):
                 img["src"] = selected
                 img.attrs.pop("srcset", None)
                 img.attrs.pop("data-srcset", None)
@@ -358,7 +458,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             if raw.lower().startswith("data:") or raw.startswith("#"):
                 return raw
             absolute_url = urljoin(base_url, raw)
-            rec = url_map.get(_url_without_fragment(absolute_url))
+            rec = url_map.get(_resource_key(absolute_url))
             if rec:
                 fragment = urlparse(absolute_url).fragment
                 return _rel_link(html_file, rec["local_path"]) + ("#" + fragment if fragment else "")
@@ -379,10 +479,11 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
         for img in soup.find_all("img"):
             # Lazy attributes are only useful when their body already exists in
             # HAR. Do not make additional requests while building the mirror.
-            if not img.get("src") or str(img.get("src")).lower().startswith("data:"):
+            src = str(img.get("src") or "")
+            if not src or src.lower().startswith("data:") or _resource_key(urljoin(base_url, src)) not in url_map:
                 for lazy_attr in ("data-src", "data-lazy-src", "data-original"):
                     candidate = str(img.get(lazy_attr) or "")
-                    if candidate and _url_without_fragment(urljoin(base_url, candidate)) in url_map:
+                    if candidate and _resource_key(urljoin(base_url, candidate)) in url_map:
                         img["src"] = candidate
                         break
             rewrite_attr(img, "src")
@@ -406,6 +507,9 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                         tag["src"] = fallback
                 else:
                     tag.attrs.pop("srcset", None)
+                    # An empty picture source can hide the archived img fallback.
+                    if tag.name == "source" and tag.find_parent("picture"):
+                        tag.decompose()
         for media in soup.find_all(["audio", "video", "source"]):
             rewrite_attr(media, "src")
         # SVG images are inert in an <img>/CSS image context. External SVG use
@@ -427,7 +531,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             rels = [str(x).lower() for x in (link.get("rel") or [])]
             href = str(link.get("href") or "")
             if "stylesheet" in rels and href:
-                absolute = _url_without_fragment(urljoin(base_url, href))
+                absolute = _resource_key(urljoin(base_url, href))
                 target = runtime_css_map.get(absolute)
                 if target:
                     link["href"] = _rel_link(html_file, target)
@@ -523,6 +627,11 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
     write_json(website / "website_manifest.json", {"created_at": iso_now(), "pages": page_results})
     write_json(website / "menue_manifest.json", {"controller_csp_hash": MENU_SCRIPT_HASH, "pages": menu_results})
     write_json(website / "linkziele_manifest.json", {"controller_csp_hash": LINK_SCRIPT_HASH, "pages": link_results})
+    for reference in missing_references:
+        if reference["kind"] == "navigation":
+            reference["reason"] = "page_not_archived"
+        else:
+            reference.update(resource_issues.get(_resource_key(reference["url"]), {"reason": "not_in_har"}))
     write_json(website / "fehlende_referenzen.json", {"references": missing_references})
     write_json(website / "ressourcen_manifest.json", {"created_at": iso_now(), "resources": manifest_rows})
     write_csv(website / "ressourcen_manifest.csv", manifest_rows,
@@ -688,6 +797,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                         page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 8000))
                     except Exception:
                         pass
+                    lazy_image_loading = _load_lazy_images(page, timeout_ms)
                     final_url = _url_without_fragment(page.url)
                     final_host = (urlparse(final_url).hostname or "").lower()
                     if final_host and is_first_party(final_host, root_domain):
@@ -713,6 +823,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                         "title": title, "html_name": html_name,
                         "raw_dom_relative": raw_dom.relative_to(case_root).as_posix(),
                         "image_sources": image_sources,
+                        "lazy_image_loading": lazy_image_loading,
                         "screenshot": f"03_screenshots/{screenshot_name}",
                     }
                     visited.append(item)
