@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "repository": "https://github.com/gl1tchb1rd/forensic_sitesaver",
   "files": {
-    ".forensic_sitesaver/CHANGELOG.md": "8a35432d1a1077e81d3079458ccd776887eddf8ccf3aefbf6e2446c14ad6ad3a",
+    ".forensic_sitesaver/CHANGELOG.md": "775fcc6c02499f9ec5e1b95e362213795dd606a701a1649977ec199848419aa1",
     ".forensic_sitesaver/LICENSE_GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     ".forensic_sitesaver/LIZENZEN_UND_DRITTANBIETER.txt": "4edb0d871d2e60ae244a117e90a346d4504317125924f57d6c4d95f0f7700ff1",
     ".forensic_sitesaver/__init__.py": "9bb0e0aff827d2cac00c2d1e7e447c5b3551285410de3c66b8787f7e0ac3e965",
@@ -16,8 +16,8 @@
     ".forensic_sitesaver/license_tools.py": "a4dd0bfbc357a461cd322986bfeb67cacde7a98e7ce6136d9097f31572655c51",
     ".forensic_sitesaver/offline_links.js": "0943c18f27560d08da8813083056c721d5685cdcf552e330516cfaf230d4321a",
     ".forensic_sitesaver/offline_links.py": "7aa51521d56ab652419e3ff77454520ab369f07e616e4792c9fee23fab7c57e4",
-    ".forensic_sitesaver/offline_menu.js": "e499e038e7e266d3299925e11489d1c97efa8cfebc2484c82e04dfb9608f2f3e",
-    ".forensic_sitesaver/offline_menu.py": "ead7fbc4bc3c6b552347c9ee22ba6b27421208ef8aea6689724181a7d9e7e2d3",
+    ".forensic_sitesaver/offline_menu.js": "b7630d037bb10ccfd16b36113dffcf92ef987d38a21172b493cfc8d4cdf4684b",
+    ".forensic_sitesaver/offline_menu.py": "2f020cd453064230dc9831bc687b5a6299049980321c08e3cffd6ec2debc44c5",
     ".forensic_sitesaver/reports.py": "30e6289a2c37c5dc60bf5641e081c213a82de069ddfd2ab69f50b9b5f11aec06",
     ".forensic_sitesaver/requirements.txt": "a96b96b97951e8e4761e5a95403b208441d0b6332c875afd868288aaf8081114",
     ".forensic_sitesaver/tests/test_capture_report.py": "4f380907aa7aee916ede87ce129ee79d5b3de4feb4a86307d6b6800f708d7a8f",
@@ -25,10 +25,10 @@
     ".forensic_sitesaver/tests/test_legacy_mirror.py": "0c5389524e246780a13f1102bb8eb182612a384e1e32d3473d1c1f1a088fd06b",
     ".forensic_sitesaver/tests/test_local_mirror.py": "49ba1e52a14658e6f1d37841103b068d636c43af7ced61576ba694ac24ed11a7",
     ".forensic_sitesaver/tests/test_offline_links.py": "f0d47f6859d871a8eb4636ae8c18649ccf263f6b0a9b050390f656e69967ec31",
-    ".forensic_sitesaver/tests/test_offline_menu.py": "29a23a6dfdb8ab1170d6b19656458de86e6123a324d87b949526dc3776154a3f",
+    ".forensic_sitesaver/tests/test_offline_menu.py": "fcb6a132468c2baec944505179a074948d9dd9782ca234f35e4872a7a10217ab",
     ".forensic_sitesaver/tls_capture.py": "17308a5fef7d5cfc4d8e768d3ea345da9a5b3be43b6823d4520c5930166a1686",
     ".forensic_sitesaver/updater.py": "6589323fe1c0d378027353f25a2ef93684a2ddfb9b3357843c8006d4832698e8",
-    "README.md": "833f2a873fe8308dd5f2bf367afb3f1901cb1eccd7f514290a141c3fab07056b",
+    "README.md": "cac92d71869887dc29385bce63dff4e6c33a003762fd2c6be16c3fc44d7d540b",
     "forensic_sitesaver.py": "196a4bfade9b951c469e8e0085330c0cb023fb3d595611ae3ee55b4ee3eb6612"
   }
 }

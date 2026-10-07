@@ -2,6 +2,7 @@
 
 ## Noch nicht veröffentlicht
 
+- Erkannte Dropdown-Untermenüs öffnen wieder beim Darüberfahren mit der Maus über den ursprünglichen Menülink. Der Wechsel ins Untermenü, lokale Seitenlinks, Touch-Schalter und Tastaturbedienung bleiben nutzbar; Originalskripte und Netzwerkverbindungen bleiben gesperrt. Ein Chromium-Test prüft die Newsup-/SmartMenus-Struktur aus dem gemeldeten Feuerwehr-DOM per Datei und HTTP.
 - Bewährte Teile der Website-Spiegel-Erstellung aus K25-SiteSaver übernommen: HAR-Anhänge über `_file`/`_sha1`, abweichende ZIP-Unterordner und separate Anhänge neben HAR-Dateien werden gelesen. Mehrdeutige Zuordnungen und Pfade außerhalb des HAR-Ordners werden abgewiesen.
 - Passive Ressourcen behalten alle unterschiedlichen aufgezeichneten Inhaltsfassungen; die zuletzt erfolgreich gesicherte Fassung wird angezeigt. Dateiendungen richten sich nach dem Inhaltstyp, Dateinamen berücksichtigen Windows-Sondernamen und ältere Font-Inhaltstypen bleiben nutzbar.
 - Zu lange Ressourcenpfade werden unter `ressourcen/_kurz` abgelegt und entsprechend verlinkt. Das vermeidet die klassische Windows-Pfadgrenze bei langen JPEG-Namen; die ursprüngliche URL und die Pfadverkürzung bleiben im Ressourcenmanifest nachvollziehbar.

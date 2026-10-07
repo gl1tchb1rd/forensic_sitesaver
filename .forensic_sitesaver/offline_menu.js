@@ -8,6 +8,7 @@
     const properties = ['display', 'visibility', 'opacity', 'pointer-events', 'transform', 'max-height', 'height'];
     const records = [];
     const byControl = new Map();
+    const mouseHover = window.matchMedia('(hover: hover) and (pointer: fine)');
     for (const panel of document.querySelectorAll(`[${prefix}panel]`)) {
         const key = panel.getAttribute(`${prefix}panel`);
         const triggers = controls.filter(control => control.getAttribute(`${prefix}controls`) === key);
@@ -18,6 +19,7 @@
             panel, triggers,
             open: expanded ? expanded.getAttribute('aria-expanded') === 'true' :
                 !panel.hidden && computed.display !== 'none' && computed.visibility !== 'hidden' && computed.opacity !== '0',
+            hoverOpened: false,
             active: true,
             hidden: panel.hidden,
             ariaHidden: panel.getAttribute('aria-hidden'),
@@ -69,18 +71,19 @@
 
     function close(record) {
         record.open = false;
+        record.hoverOpened = false;
         render(record);
         // Closing a parent also resets nested dropdowns.
         for (const child of records) {
             if (child !== record && record.panel.contains(child.panel)) {
                 child.open = false;
+                child.hoverOpened = false;
                 render(child);
             }
         }
     }
 
-    function toggle(record) {
-        if (record.open) { close(record); return; }
+    function open(record) {
         for (const other of records) {
             // Independent dropdowns close; nested parent menus stay open.
             if (other !== record && other.active && other.open &&
@@ -88,6 +91,30 @@
         }
         record.open = true;
         render(record);
+    }
+
+    function toggle(record) {
+        // A mouse entering a fragment toggle can open it immediately before
+        // its click. Treat that first click as an explicit opening.
+        if (record.hoverOpened) { record.hoverOpened = false; render(record); return; }
+        if (record.open) close(record);
+        else open(record);
+    }
+
+    for (const record of records) {
+        const key = record.panel.getAttribute(`${prefix}panel`);
+        const region = document.querySelector(`[${prefix}hover-region="${key}"]`);
+        if (!region) continue;
+        for (const link of region.querySelectorAll(`[${prefix}hover-trigger="${key}"]`)) {
+            link.addEventListener('pointerenter', event => {
+                if (event.pointerType !== 'mouse' || !mouseHover.matches || record.open) return;
+                open(record);
+                record.hoverOpened = true;
+            });
+        }
+        region.addEventListener('pointerleave', event => {
+            if (event.pointerType === 'mouse' && mouseHover.matches) close(record);
+        });
     }
 
     document.addEventListener('click', event => {

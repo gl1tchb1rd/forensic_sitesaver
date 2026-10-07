@@ -132,6 +132,15 @@ def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> 
             trigger.attrs.pop("xlink:href", None)
         trigger[PREFIX + "controls"] = key
         trigger["aria-controls"] = panel["id"]
+        # Keep the familiar hover area of a navigation link and its direct
+        # submenu. The separate button remains available for touch/keyboard.
+        hover = (control.name == "a" and panel.parent is control.parent
+                 and bool(set(panel.get("class", [])) & {"dropdown-menu", "sub-menu", "submenu"})
+                 and isinstance(control.parent, Tag)
+                 and control.parent.name in {"li", "div"})
+        if hover:
+            control[PREFIX + "hover-trigger"] = key
+            control.parent[PREFIX + "hover-region"] = key
         if trigger.name == "button":
             trigger["type"] = "button"
             for attr in ("form", "formaction", "formmethod", "formenctype", "formtarget"):
@@ -140,7 +149,7 @@ def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> 
             trigger["role"] = "button"
             trigger["tabindex"] = "0"
         menus.append({"panel_id": panel["id"], "label": label, "recognition": method,
-                      "separate_button": trigger is not control})
+                      "separate_button": trigger is not control, "hover": hover})
     return {"menus": menus, "unresolved": unresolved}
 
 
