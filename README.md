@@ -151,11 +151,3 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 ## Öffentliche Version
 
 Aktueller Versionsstand: **1.1.0**. Die Änderungen gegenüber **1.0.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
-
-## geplante Änderungen
-
-Für die nächste Version werden folgende Änderungen geplant:
-Auflistung aller externen Links und E-Mail-Adressen im Auswertungsbericht
-Isolierte HAR-Wiedergabe für JavaScript-Seiten
-
-Verbesserungsvorschläge jederzeit Willkommen
