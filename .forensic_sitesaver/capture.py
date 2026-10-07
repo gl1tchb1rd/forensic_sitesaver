@@ -17,7 +17,7 @@ from collections import deque
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urljoin, urlparse, urlunparse
+from urllib.parse import quote, unquote, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -41,6 +41,16 @@ from offline_links import (
 ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base",
                "animate", "animatemotion", "animatetransform", "set"}
 RESOURCE_MIME_PREFIXES = ("image/", "font/", "audio/", "video/", "text/css")
+FONT_MIMES = {"application/font-woff", "application/x-font-woff", "application/vnd.ms-fontobject"}
+RESOURCE_EXTENSIONS = {
+    "text/css": ".css", "image/svg+xml": ".svg", "image/png": ".png",
+    "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
+    "image/avif": ".avif", "image/bmp": ".bmp", "image/x-icon": ".ico",
+    "image/vnd.microsoft.icon": ".ico", "font/woff": ".woff", "font/woff2": ".woff2",
+    "font/ttf": ".ttf", "font/otf": ".otf", "application/font-woff": ".woff",
+    "application/x-font-woff": ".woff", "application/vnd.ms-fontobject": ".eot",
+}
+WINDOWS_RESERVED_NAMES = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
 CSS_STRING = r'"(?:\\[\s\S]|[^"\\])*"' + r"|'(?:\\[\s\S]|[^'\\])*'"
 CSS_TOKEN_RE = re.compile(
     rf"(?P<comment>/\*.*?\*/)|(?P<string>{CSS_STRING})|"
@@ -90,16 +100,26 @@ def _page_slug(url: str, index: int) -> str:
 
 
 def _resource_relpath(url: str, mime: str, body: bytes) -> Path:
+    # K25's MIME-based suffixes and Windows filename handling are retained.
+    def component(value: str) -> str:
+        value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", unquote(value)).strip(" .") or "resource"
+        if value.split(".", 1)[0].lower() in WINDOWS_RESERVED_NAMES:
+            value = "_" + value
+        if len(value) > 100:
+            suffix = Path(value).suffix[:12]
+            value = Path(value).stem[:75] + "__" + sha256_bytes(value.encode())[:10] + suffix
+        return value
     p = urlparse(url)
-    host = sanitize_component(p.hostname or "unknown-host", 160)
+    host = component(p.hostname or "unknown-host")
     raw_path = p.path or "/resource"
-    parts = [sanitize_component(x, 100) for x in raw_path.split("/") if x]
+    parts = [component(x) for x in raw_path.split("/") if x]
     if not parts:
         parts = ["index"]
     name = parts[-1]
-    if "." not in name:
-        ext = mimetypes.guess_extension((mime or "").split(";", 1)[0].strip()) or ""
-        name += ext
+    mime = (mime or "").split(";", 1)[0].strip().lower()
+    ext = RESOURCE_EXTENSIONS.get(mime) or mimetypes.guess_extension(mime) or ".bin"
+    if Path(name).suffix.lower() != ext:
+        name = Path(name).stem + ext
     if p.query:
         stem, ext = os.path.splitext(name)
         name = f"{stem}__q_{hashlib.sha256(p.query.encode()).hexdigest()[:8]}{ext}"
@@ -108,29 +128,63 @@ def _resource_relpath(url: str, mime: str, body: bytes) -> Path:
 
 
 def _har_body(segment: Path, content: dict[str, Any]) -> bytes | None:
+    """Read K25-compatible inline/attached HAR bodies without changing the archive."""
     if not content:
         return None
-    file_ref = content.get("_file")
-    if file_ref and zipfile.is_zipfile(segment):
-        try:
-            with zipfile.ZipFile(segment, "r") as z:
-                return z.read(str(file_ref))
-        except Exception:
-            return None
     text = content.get("text")
-    if text is None:
-        return None
+    inline = None
     try:
-        if content.get("encoding") == "base64":
-            return base64.b64decode(text)
-        return str(text).encode("utf-8")
+        if text is not None:
+            try:
+                inline = base64.b64decode(text) if str(content.get("encoding") or "").lower() == "base64" else str(text).encode("utf-8")
+            except (ValueError, TypeError):
+                pass
+            if inline:
+                return inline
+        references = [str(content[name]).strip().replace("\\", "/") for name in ("_file", "_sha1") if content.get(name)]
+        if not references:
+            return inline
+        if zipfile.is_zipfile(segment):
+            with zipfile.ZipFile(segment, "r") as archive:
+                names = [name for name in archive.namelist() if not name.endswith("/")]
+                for reference in references:
+                    for candidate in (reference, reference.lstrip("/"), "resources/" + reference.lstrip("/")):
+                        matches = [name for name in names if name.replace("\\", "/") == candidate]
+                        if len(matches) == 1:
+                            return archive.read(matches[0])
+                    matches = [name for name in names if name.replace("\\", "/").rsplit("/", 1)[-1] == reference.rsplit("/", 1)[-1]]
+                    if len(matches) == 1:
+                        return archive.read(matches[0])
+        else:
+            parent = segment.parent.resolve()
+            for reference in references:
+                if Path(reference).is_absolute() or re.match(r"^[a-zA-Z]:", reference):
+                    continue
+                attached = (parent / reference).resolve()
+                if parent in attached.parents and attached.is_file():
+                    return attached.read_bytes()
     except Exception:
-        return None
+        return inline
+    return inline
 
 
 def _safe_resource_mime(mime: str) -> bool:
     mime = (mime or "").lower().split(";", 1)[0].strip()
-    return any(mime.startswith(prefix) for prefix in RESOURCE_MIME_PREFIXES)
+    return mime in FONT_MIMES or any(mime.startswith(prefix) for prefix in RESOURCE_MIME_PREFIXES)
+
+
+def _decode_css(body: bytes, charset: str = "") -> str:
+    declared = re.match(br'\s*@charset\s+["\']([^"\']+)["\']\s*;', body)
+    encodings = ["utf-8-sig", charset, declared[1].decode("ascii", "replace") if declared else "", "cp1252", "latin-1"]
+    for encoding in encodings:
+        if not encoding:
+            continue
+        try:
+            text = body.decode(encoding)
+            return re.sub(r'^\s*@charset\s+["\'][^"\']+["\']\s*;', '@charset "UTF-8";', text, flags=re.I)
+        except (LookupError, UnicodeError):
+            continue
+    return body.decode("utf-8", "replace")
 
 
 def _rel_link(from_file: Path, to_file: Path) -> str:
@@ -292,6 +346,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
     manifest_rows: list[dict[str, Any]] = []
     redirects: dict[str, str] = {}
     resource_issues: dict[str, dict[str, Any]] = {}
+    resource_versions: dict[tuple[str, str], dict[str, Any]] = {}
     missing_references: list[dict[str, str]] = []
 
     # Extract safe-to-view resources byte-identically. HAR remains the source for everything else.
@@ -307,8 +362,6 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             if urlparse(raw_url).scheme not in {"http", "https"}:
                 continue
             url = _resource_key(raw_url)
-            if url in url_map:
-                continue
             status = int(resp.get("status") or 0)
             if 300 <= status < 400 and resp.get("redirectURL"):
                 redirects[url] = _resource_key(urljoin(raw_url, resp["redirectURL"]))
@@ -331,8 +384,18 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
             if body is None:
                 resource_issues[url] = {"reason": "response_body_missing", "http_status": status, "mime": mime}
                 continue
+            digest = sha256_bytes(body)
+            version_key = (url, digest)
+            if version_key in resource_versions:
+                url_map[url] = resource_versions[version_key]
+                continue
             rel = _resource_relpath(url, mime, body)
             out = resources_dir / rel
+            shortened_path = len(str(out)) > 230
+            if shortened_path:
+                # Leave room for version suffixes below Windows' classic MAX_PATH.
+                # Long JPEG names can exceed it even when shorter PNG paths work.
+                out = resources_dir / "_kurz" / (sha256_bytes(url.encode())[:20] + out.suffix)
             if out.exists() and out.read_bytes() != body:
                 out = out.with_name(out.stem + "__" + sha256_bytes(body)[:8] + out.suffix)
             ensure_dir(out.parent)
@@ -340,11 +403,17 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                 out.write_bytes(body)
             rec = {
                 "original_url": _url_without_fragment(raw_url), "mime": mime, "http_status": resp.get("status"),
-                "size": len(body), "sha256": sha256_bytes(body),
+                "size": len(body), "sha256": digest,
                 "local_path": out, "local_relative": out.relative_to(website).as_posix(),
                 "har_segment": segment.name, "byte_preserved": True,
             }
+            if shortened_path:
+                rec["path_shortened"] = True
+            charset = re.search(r'charset\s*=\s*["\']?([^;\s"\']+)', headers.get("content-type", ""), re.I)
+            if charset:
+                rec["charset"] = charset[1]
             url_map[url] = rec
+            resource_versions[version_key] = rec
             manifest_rows.append({k: v for k, v in rec.items() if k != "local_path"})
 
     # The DOM often retains the pre-redirect image URL; HAR stores the body at
@@ -366,7 +435,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
     for url, target in runtime_css_map.items():
         rec = url_map[url]
         try:
-            original = rec["local_path"].read_text(encoding="utf-8", errors="replace")
+            original = _decode_css(rec["local_path"].read_bytes(), rec.get("charset", ""))
             rewritten = _rewrite_css(original, rec["original_url"], target, url_map, runtime_css_map, missing_references)
             write_text(target, rewritten)
         except Exception:
@@ -652,13 +721,24 @@ def rebuild_local_mirror(source: Path, output: Path) -> dict[str, Any]:
         raise ValueError("Die Sicherung enthält keine gespeicherte Seitenliste.")
     if not (source / "01_har").is_dir():
         raise ValueError("Der HAR-Ordner der Sicherung fehlt.")
-    for item in visited:
-        raw = (source / item["raw_dom_relative"]).resolve()
+    normalized = []
+    for index, saved_item in enumerate(visited, 1):
+        item = dict(saved_item)
+        # K25 stored dom_raw and Windows separators, without html_name.
+        raw_relative = str(item.get("raw_dom_relative") or item.get("dom_raw") or "").replace("\\", "/")
+        if not raw_relative or re.match(r"^[a-zA-Z]:", raw_relative):
+            raise ValueError("Ungültiger Pfad zur gespeicherten DOM-Datei.")
+        raw = (source / raw_relative).resolve()
         if source not in raw.parents or not raw.is_file():
             raise ValueError("Eine gespeicherte DOM-Datei fehlt oder liegt außerhalb der Sicherung.")
+        item["raw_dom_relative"] = raw.relative_to(source).as_posix()
+        item["final_url"] = item.get("final_url") or item["requested_url"]
+        item["index"] = int(item.get("index") or index)
+        item["html_name"] = item.get("html_name") or _page_slug(item["final_url"], item["index"])
         if Path(item["html_name"]).name != item["html_name"] or "\\" in item["html_name"]:
             raise ValueError("Ungültiger Dateiname in der gespeicherten Seitenliste.")
-    result = build_local_mirror(source, visited, output_dir=output)
+        normalized.append(item)
+    result = build_local_mirror(source, normalized, output_dir=output)
     write_text(output / "QUELLE.txt", f"Abgeleitete Ansicht aus: {source}\nErstellt: {iso_now()}\n"
                "Die ursprüngliche Sicherung wurde ausschließlich gelesen.\n")
     return result

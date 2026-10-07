@@ -83,7 +83,12 @@ def write_capture_report(case_root: Path, statistics: dict[str, Any]) -> None:
         "fremde Skripte, Inline-Eventhandler und externe Netzwerk-Nachladevorgänge in der lokalen Auswertungsfassung.", "",
         "Erfasste Bilder, Stylesheets, Fonts und Medien werden, soweit für die lokale Darstellung vorgesehen "
         "und verfügbar, byteidentisch aus der HAR-Sicherung extrahiert. Für Stylesheets werden zusätzlich "
-        "angepasste Laufzeitkopien erzeugt. Die lokale Darstellung kann deshalb von der ursprünglichen "
+        "angepasste UTF-8-Laufzeitkopien erzeugt. HAR-Anhänge über _file/_sha1 und eindeutige alternative "
+        "ZIP-Pfade werden berücksichtigt; separate Anhänge werden nur innerhalb des HAR-Ordners gelesen. "
+        "Unterschiedliche aufgezeichnete Inhaltsfassungen bleiben erhalten; für die Darstellung wird "
+        "die zuletzt erfolgreich gesicherte Fassung verwendet. Zu lange lokale Ressourcenpfade werden "
+        "unter ressourcen/_kurz abgelegt, um Windows-Pfadgrenzen zu berücksichtigen; Original-URL und "
+        "Pfadverkürzung werden im Ressourcenmanifest dokumentiert. Die lokale Darstellung kann deshalb von der ursprünglichen "
         "interaktiven Website abweichen. Für die ursprüngliche aufgezeichnete HTTP-Kommunikation und "
         "die enthaltenen Response-Inhalte bleiben die HAR-Dateien die technische Primärquelle.", "",
         "ERGÄNZENDE AUSWERTUNG UND INTEGRITÄT",

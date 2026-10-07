@@ -79,6 +79,10 @@ Bei neuen Sicherungen scrollt der Browser während der HAR-Aufzeichnung zu noch 
 
 Die lokale Zuordnung berücksichtigt URL-kodierte Umlaute und Leerzeichen, maskierte CSS-Dateinamen und `image-set(...)`. Relative Verweise in weitergeleiteten Stylesheets verwenden die endgültige Stylesheet-Adresse. Ein nicht gesicherter Lazy-Platzhalter kann durch sein bereits aufgezeichnetes Ziel ersetzt werden; unbrauchbare `picture`-Quellen verdecken das gesicherte Ersatzbild nicht mehr.
 
+Die Ressourcenlesung übernimmt das robustere Vorgehen aus K25-SiteSaver: HAR-Anhänge können über `_file` oder `_sha1`, in ZIP-Unterordnern oder als separate Dateien neben einer HAR-Datei vorliegen. Abweichende ZIP-Pfade werden nur bei eindeutiger Zuordnung aufgelöst; separate Anhänge müssen innerhalb des HAR-Ordners liegen. Unterschiedliche gespeicherte Fassungen derselben Ressource bleiben erhalten, während die Ansicht die zuletzt erfolgreich aufgezeichnete Fassung verwendet. Lokale Dateien erhalten eine zum Inhaltstyp passende Endung und Windows-taugliche Dateinamen. Ältere CSS-Zeichensätze werden ausschließlich für die UTF-8-Laufzeitkopie umgewandelt.
+
+Würde der vollständige Ressourcenpfad länger als 230 Zeichen, verwendet die Ansicht einen kurzen Dateinamen unter `ressourcen/_kurz`. Dadurch bleibt Platz für unterschiedliche Inhaltsfassungen unter der klassischen Windows-Pfadgrenze. Die Original-URL, Prüfsumme, lokale Ablage und Kennzeichnung `path_shortened` stehen in `ressourcen_manifest.json`; die Bildinhalte werden nicht verändert.
+
 Nur bereits aufgezeichnete Inhalte sind verfügbar: Ein nie geladenes Lazy-Bild oder eine nicht besuchte Unterseite kann aus dem Mitschnitt nicht rekonstruiert werden. Solche Verweise stehen in `fehlende_referenzen.json`. Nicht gesicherte Links erhalten einen Hinweis und führen keinen externen Aufruf aus. Ausschließlich von Originalskripten erzeugte Navigation kann nicht rekonstruiert werden.
 
 Die Diagnose enthält je fehlender Referenz eine Ursache (`reason`): `not_in_har` bedeutet, dass kein entsprechender Ressourceneintrag gefunden wurde; `response_body_missing` kennzeichnet fehlende Response-Inhalte, `http_error` eine erfolglose HTTP-Antwort und `no_response` eine ausgebliebene Antwort. Weitere Ursachen sind `unsupported_mime`, `redirect_target_not_archived` und für Seitenlinks `page_not_archived`. Wenn vorhanden, werden HTTP-Status und Inhaltstyp ergänzt. Fehlt das Bild selbst im Mitschnitt, ist eine neue Sicherung nötig.
@@ -90,6 +94,8 @@ Die Ziele haben keinen navigierbaren `href`; auch E-Mail-, Telefon- und andere A
 ### Vorhandene Sicherung neu anzeigen
 
 Im Reiter „Website-Sicherung“ erzeugt **„Ansicht aus Sicherung neu erzeugen“** eine neue Ansicht in einem separaten, leeren Ordner. Zuerst den ursprünglichen Sicherungsordner auswählen, anschließend den Ausgabeordner außerhalb der Sicherung. Danach dessen `index.html` öffnen. HAR, originaler DOM, Sicherungsvermerk und Primärprüfsummen werden ausschließlich gelesen. Es erfolgen keine neuen Website-Aufrufe.
+
+Auch bestehende K25-SiteSaver-Sicherungen werden unterstützt: Die alte Seitenliste mit `dom_raw` und Windows-Pfadtrennern wird beim Lesen berücksichtigt; die ursprüngliche Sicherung bleibt erhalten.
 
 Alternativ aus dem Programmordner (Windows: `.venv\\Scripts\\python.exe` statt `.venv/bin/python`):
 

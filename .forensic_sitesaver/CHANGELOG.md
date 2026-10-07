@@ -2,6 +2,11 @@
 
 ## Noch nicht veröffentlicht
 
+- Bewährte Teile der Website-Spiegel-Erstellung aus K25-SiteSaver übernommen: HAR-Anhänge über `_file`/`_sha1`, abweichende ZIP-Unterordner und separate Anhänge neben HAR-Dateien werden gelesen. Mehrdeutige Zuordnungen und Pfade außerhalb des HAR-Ordners werden abgewiesen.
+- Passive Ressourcen behalten alle unterschiedlichen aufgezeichneten Inhaltsfassungen; die zuletzt erfolgreich gesicherte Fassung wird angezeigt. Dateiendungen richten sich nach dem Inhaltstyp, Dateinamen berücksichtigen Windows-Sondernamen und ältere Font-Inhaltstypen bleiben nutzbar.
+- Zu lange Ressourcenpfade werden unter `ressourcen/_kurz` abgelegt und entsprechend verlinkt. Das vermeidet die klassische Windows-Pfadgrenze bei langen JPEG-Namen; die ursprüngliche URL und die Pfadverkürzung bleiben im Ressourcenmanifest nachvollziehbar.
+- Ältere CSS-Zeichensätze werden für die Laufzeitfassung korrekt gelesen. Die Originaldateien bleiben bytegetreu erhalten. Bestehende K25-Sicherungen mit `dom_raw` und Windows-Pfadtrennern lassen sich in eine separate Ansicht überführen.
+- Ein vollständiger Chromium-Sicherungstest prüft die echte segmentierte HAR-Aufzeichnung, Lazy-Bildvarianten, die anschließende Offline-Ansicht per Datei/HTTP und die Netzwerksperren.
 - Neue Sicherungen laden Lazy-Bilder unterhalb des sichtbaren Ausschnitts durch begrenztes Scrollen während der HAR-Aufzeichnung. Die ursprüngliche Scrollposition wird wiederhergestellt; Ergebnis und Grenzen werden je Seite dokumentiert.
 - Bildzuordnung berücksichtigt kodierte Umlaute/Leerzeichen, maskierte CSS-URLs, `image-set(...)`, relative Bildpfade in weitergeleiteten Stylesheets und aussagekräftige Content-Type-Header bei generischen HAR-Inhaltstypen.
 - Gesicherte Lazy-Ziele ersetzen fehlende Platzhalter; nicht nutzbare `picture`-Quellen verdecken gesicherte Ersatzbilder nicht mehr.
