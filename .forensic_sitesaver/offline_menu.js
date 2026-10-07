@@ -119,24 +119,42 @@
 
     document.addEventListener('click', event => {
         if (!(event.target instanceof Element)) return;
+        if (event.target.closest('dialog[open]')) return;
         const trigger = event.target.closest(`[${prefix}controls]`);
         if (byControl.has(trigger)) {
+            const record = byControl.get(trigger);
+            // Mouse clicks follow the original page link. With touch, the
+            // first tap opens a closed submenu and a second tap follows it.
+            if (trigger.hasAttribute(`${prefix}navigation-link`) &&
+                (event.detail === 0 || mouseHover.matches || record.open)) return;
             event.preventDefault();
-            toggle(byControl.get(trigger));
+            event.stopImmediatePropagation();
+            toggle(record);
             return;
         }
         for (const record of records) {
             if (record.active && record.open && !record.panel.contains(event.target) &&
                 !record.triggers.some(control => control.contains(event.target))) close(record);
         }
-    });
+    }, true);
 
     document.addEventListener('keydown', event => {
         if (!(event.target instanceof Element)) return;
+        if (event.target.closest('dialog[open]')) return;
         const trigger = event.target.closest(`[${prefix}controls]`);
-        if (byControl.has(trigger) && trigger.tagName !== 'BUTTON' && ['Enter', ' '].includes(event.key)) {
+        const record = byControl.get(trigger);
+        const navigationLink = trigger?.hasAttribute(`${prefix}navigation-link`);
+        if (record && navigationLink && ['ArrowDown', ' '].includes(event.key)) {
             event.preventDefault();
-            toggle(byControl.get(trigger));
+            event.stopImmediatePropagation();
+            if (event.key === 'ArrowDown') {
+                open(record);
+                record.panel.querySelector('a[href], button:not([disabled])')?.focus();
+            } else toggle(record);
+        } else if (record && !navigationLink && trigger.tagName !== 'BUTTON' && ['Enter', ' '].includes(event.key)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            toggle(record);
         } else if (event.key === 'Escape') {
             const open = records.filter(record => record.active && record.open);
             const containing = open.filter(record => record.panel.contains(event.target) || record.triggers.includes(trigger));
@@ -147,7 +165,7 @@
                 record.triggers[0].focus();
             }
         }
-    });
+    }, true);
     window.addEventListener('resize', () => records.forEach(render));
     records.forEach(render);
 })();

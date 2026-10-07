@@ -79,8 +79,9 @@ def write_capture_report(case_root: Path, statistics: dict[str, Any]) -> None:
         "oder stillgelegt. Stillgelegte Linkziele bleiben als Text einschließlich Parametern und "
         "Sprungmarken sichtbar; ein eigener lokaler Linkcontroller zeigt sie in einem Dialog mit "
         "Sperrhinweis und Kopierfunktion, ohne sie aufzurufen. Adressen und Controller-Hash stehen in "
-        "02_website/linkziele_manifest.json. Vorhandene erkannte Navigationsmenüs werden durch eigenen lokalen Menücode "
-        "bedient, der ausschließlich per CSP-Hash freigegeben wird. Er öffnet und schließt vorhandene "
+        "02_website/linkziele_manifest.json. Vorhandene erkannte Navigationsmenüs werden "
+        "über ihre ursprünglichen Schalter und Links bedient. Der dafür verwendete eigene lokale Menücode "
+        "wird ausschließlich per CSP-Hash freigegeben; zusätzlich erzeugte Menüknöpfe entfallen. Er öffnet und schließt vorhandene "
         "Menüelemente, ohne Originalskripte auszuführen oder Inhalte nachzuladen. Erkennung und Hash "
         "werden in 02_website/menue_manifest.json dokumentiert. Eine Content Security Policy blockiert "
         "fremde Skripte, Inline-Eventhandler und externe Netzwerk-Nachladevorgänge in der lokalen Auswertungsfassung.", "",
