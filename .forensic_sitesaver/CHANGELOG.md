@@ -1,15 +1,25 @@
 # Changelog
 
-## Noch nicht veröffentlicht
+## 1.1.0
 
-- Erkannte vorhandene Hamburger-Menüs und Dropdowns werden mit eigenem lokalem JavaScript bedienbar: CSP-Hashfreigabe ausschließlich dieses Controllers, Tastaturbedienung, verschachtelte Menüs und responsive Navigation. Originalskripte, fremde Eventhandler, Netzwerkanfragen und Formulare bleiben blockiert; `menue_manifest.json` dokumentiert die abgeleitete Bedienhilfe.
-- Lokaler Website-Spiegel: eingebettete Bilder und SVG-Bilder bleiben sichtbar; Bildvarianten, erfasste Lazy-Bilder, Basis-URLs, Ressourcen-Weiterleitungen und CSS-Importe werden lokal aufgelöst. Neue Sicherungen dokumentieren die vom Browser ausgewählten Bildquellen, ohne den Original-DOM zu verändern.
-- Navigation zwischen gesicherten Seiten erhält Sprungmarken und Image-Map-Verweise. Fehlende Ziele und Ressourcen werden in `fehlende_referenzen.json` ausgewiesen; der Index maskiert fremde Seitentitel und URLs als Text.
-- Neue GUI-Funktion und CLI-Befehl `mirror` erzeugen eine korrigierte Ansicht aus vorhandenen Sicherungen in einem separaten Ausgabeordner, ohne Primärdaten oder deren Prüfsummen zu verändern.
-- Regressionstests für Ressourcen, CSS, Navigation, unveränderte Primärdaten und Darstellung per Datei/HTTP in Chromium.
-- Ausführlicher Sicherungsvermerk mit Beschreibung von Browsersitzung, HAR-Aufzeichnung, Screenshots, lokalem Website-Spiegel und ergänzenden Auswertungen.
+### Neue Funktionen
+
+- Erkannte vorhandene Hamburger-Menüs und Dropdowns sind mit eigenem lokalem JavaScript bedienbar, einschließlich Tastaturbedienung, verschachtelter Menüs und responsiver Navigation. Die CSP erlaubt ausschließlich den eigenen Menücontroller per Hash; Originalskripte, fremde Eventhandler, externe Netzwerkzugriffe und Formulare bleiben blockiert. `menue_manifest.json` dokumentiert die abgeleitete Bedienhilfe.
+- Deaktivierte externe und nicht gesicherte Links zeigen ihre vollständige Zieladresse mit Parametern und Sprungmarken bei Hover/Fokus sowie in einem lokalen Dialog mit dem Hinweis „Externe Links und Verbindungen sind gesperrt.“ Die Kopierfunktion bietet bei blockierter Zwischenablage eine manuelle Ausweichmöglichkeit. Das Ziel wird nicht aufgerufen; der eigene Linkcontroller wird ausschließlich per CSP-Hash freigegeben. `linkziele_manifest.json` dokumentiert die Adressen; deaktivierte Bildkartenbereiche erhalten zusätzliche Infoknöpfe.
+- Die GUI-Funktion „Ansicht aus Sicherung neu erzeugen“ und der CLI-Befehl `mirror` erzeugen eine korrigierte Ansicht aus vorhandenen Sicherungen in einem separaten Ausgabeordner, ohne Primärdaten oder deren Prüfsummen zu verändern und ohne neue Website-Aufrufe.
+
+### Fehlerkorrekturen
+
+- Eingebettete Bilder und SVG-Bilder bleiben im lokalen Website-Spiegel sichtbar. Bildvarianten, bereits erfasste Lazy-Bilder, Basis-URLs, Ressourcen-Weiterleitungen und CSS-Importe werden lokal aufgelöst. Neue Sicherungen dokumentieren die vom Browser ausgewählten Bildquellen, ohne den Original-DOM zu verändern.
+- Lokale Seitenlinks behalten Sprungmarken und Image-Map-Verweise. Fehlende Ziele und Ressourcen werden in `fehlende_referenzen.json` ausgewiesen; der Index behandelt fremde Seitentitel und URLs als Text.
+- Die erzeugte Ansicht funktioniert sowohl beim direkten Öffnen als Datei als auch über einen lokalen statischen Webserver. Ihre UTF-8-Kennzeichnung entspricht den gespeicherten Inhalten und den CSP-Hashes.
+
+### Berichte und Prüfung
+
+- Ausführlicher Sicherungsvermerk mit Beschreibung von Browsersitzung, HAR-Aufzeichnung, Screenshots, lokalem Website-Spiegel und ergänzenden Auswertungen. Die eigenen Offline-Bedienhilfen und ihre Grenzen werden dokumentiert.
 - Tatsächlicher Sicherungsbeginn, Beginn und Ende der Browseraufzeichnung, Abschluss der Datenerhebung und Auswertung sowie gemessene Dauer.
 - Kennzahlen zu Seiten, HTTP-Fehlerseiten, Screenshots, Erfassungsfehlern, gespeicherter HAR-Datenmenge, verbleibenden Adressen und Laufparametern; zusätzliche `Sicherungsstatistik.json` im Primärbestand.
+- Regressionstests für Ressourcen, CSS, Navigation, unveränderte Primärdaten, Offline-Menüs und Linkziel-Dialoge. Chromium-Prüfungen decken Datei-/HTTP-Ansichten, Tastaturbedienung, Kopiermöglichkeiten und die CSP-Sperren ab.
 
 ## 1.0.0
 

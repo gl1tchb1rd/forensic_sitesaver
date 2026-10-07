@@ -14,7 +14,7 @@ from typing import Any, Iterable
 from urllib.parse import urlparse, urlunparse
 
 APP_NAME = "Forensic SiteSaver"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 REPOSITORY_URL = "https://github.com/gl1tchb1rd/forensic_sitesaver"
 USER_AGENT = f"forensic-sitesaver/{APP_VERSION} (+{REPOSITORY_URL})"
 

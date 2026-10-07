@@ -1,4 +1,4 @@
-# Forensic SiteSaver 1.0.0
+# Forensic SiteSaver 1.1.0
 
 `Forensic SiteSaver` ist ein plattformübergreifendes Python-Werkzeug zur passiven technischen Sicherung und Auswertung öffentlich erreichbarer Websites und Domains. Die Software richtet sich insbesondere an forensische bzw. ermittlungsunterstützende Arbeitsabläufe, ist aber nicht auf Behördennutzung beschränkt.
 
@@ -71,11 +71,15 @@ Die Tests verwenden simulierte Browseraufrufe und prüfen die tatsächlich erzeu
 
 Der Crawler klickt keine Links und sendet keine Formulare. Aktive Navigation erfolgt nur zu zugelassenen HTTP(S)-Zielen. `POST`, `PUT`, `PATCH` und `DELETE` werden blockiert; bekannte zustandsverändernde GET-Muster wie Warenkorb-/Bestell-/Zahlungsaktionen werden ebenfalls blockiert. Eine absolute Nebenwirkungsfreiheit kann technisch nicht garantiert werden, wenn ein fremder Server entgegen HTTP-Konventionen bereits normale GET-Aufrufe als Zustandsänderung missbraucht.
 
-Der lokale Website-Spiegel deaktiviert fremde Originalskripte, Frames, Formulare und externe Netzwerkverbindungen. Für erkannte Navigationsmenüs wird ausschließlich eigener lokaler Menücode freigegeben. Die unveränderte HAR bleibt technische Primärquelle.
+Der lokale Website-Spiegel deaktiviert fremde Originalskripte, Frames, Formulare und externe Netzwerkverbindungen. Für erkannte Navigationsmenüs und die Anzeige ursprünglicher Linkziele wird ausschließlich eigener lokaler Bediencode freigegeben. Die unveränderte HAR bleibt technische Primärquelle.
 
 Die Ansicht erhält eingebettete Bilder (`data:`), aufgezeichnete SVG-Bilder, lokale Bildvarianten aus `srcset`/`picture`, Sprungmarken und Verweise zwischen gesicherten Seiten. Bei neuen Sicherungen werden die vom Browser ausgewählten Bildquellen zusätzlich in der Seitenliste dokumentiert; der originale DOM bleibt unverändert. CSS-Importe und Bildreferenzen verwenden lokale Laufzeitkopien. Die Ansicht kann per Doppelklick auf `02_website/index.html` oder über einen lokalen statischen Webserver geöffnet werden.
 
 Nur bereits aufgezeichnete Inhalte sind verfügbar: Ein nie geladenes Lazy-Bild oder eine nicht besuchte Unterseite kann aus dem Mitschnitt nicht rekonstruiert werden. Solche Verweise stehen in `fehlende_referenzen.json`. Nicht gesicherte Links erhalten einen Hinweis und führen keinen externen Aufruf aus. Ausschließlich von Originalskripten erzeugte Navigation kann nicht rekonstruiert werden.
+
+Deaktivierte Links behalten ihren Text und eine Kennzeichnung wie „extern · deaktiviert“ oder „nicht gesichert · deaktiviert“. Beim Darüberfahren oder Tastaturfokus zeigt eine lokale Vorschau die vollständige ursprüngliche Zieladresse einschließlich Parametern und Sprungmarken. Ein Klick oder Enter/Leertaste öffnet ein kleines Dialogfenster mit der Adresse, **„URL kopieren“** und dem Hinweis **„Externe Links und Verbindungen sind gesperrt.“** Schließen/Escape führt den Fokus zum Ausgangspunkt zurück. Es wird weder ein externes Browserfenster geöffnet noch eine Verbindung zum Ziel aufgebaut. Falls der Browser automatisches Kopieren blockiert, bleibt die Adresse zum manuellen Kopieren markiert.
+
+Die Ziele haben keinen navigierbaren `href`; auch E-Mail-, Telefon- und andere Aktionsadressen werden ausschließlich als Text dargestellt. Gesicherte Seitenlinks bleiben lokal navigierbar. Bei deaktivierten Bildkartenbereichen stehen zusätzliche „Bildlink“-Infoknöpfe zur Verfügung. `linkziele_manifest.json` dokumentiert die ursprünglichen Adressen und den CSP-Hash des eigenen Linkcontrollers. Im gespeicherten HTML enthält auch das `title`-Attribut die Zieladresse, falls JavaScript im Browser vollständig deaktiviert ist.
 
 ### Vorhandene Sicherung neu anzeigen
 
@@ -91,7 +95,7 @@ Alternativ aus dem Programmordner (Windows: `.venv\\Scripts\\python.exe` statt `
 
 Vorhandene Hamburger-Menüs und Dropdowns erhalten eine lokale Ersatzbedienung. Die Erkennung unterstützt `aria-controls`, lokale Zielverweise, einfache ID-/Klassen-Ziele aus `data-target`/`data-bs-target`, Bootstrap-Dropdowns und typische Untermenüs unter `menu-item-has-children`. Voraussetzung ist ein bereits gespeichertes Navigationspanel mit Links. Ein echter Seitenlink bleibt erhalten und bekommt bei Bedarf einen separaten Untermenüknopf.
 
-Der eigene Controller öffnet und schließt Menüs, aktualisiert `aria-expanded`, unterstützt Enter/Leertaste/Escape, schließt Menüs bei Klick außerhalb und berücksichtigt verschachtelte Menüs sowie per CSS versteckte Desktop-/Mobil-Schalter. Er verändert ausschließlich vorhandene DOM-Elemente; er lädt keine Inhalte nach und führt keine fremden Skripte oder Eventhandler aus. Formulare und andere Schaltflächen bleiben deaktiviert. Die CSP erlaubt nur den exakten SHA-256-Hash dieses Controllers, ohne `unsafe-inline` oder `unsafe-eval` für Skripte; `connect-src 'none'`, blockierte Frames und Worker bleiben erhalten. Seiten ohne erkannte Menüs erlauben weiterhin gar keine Skripte.
+Der eigene Menücontroller öffnet und schließt Menüs, aktualisiert `aria-expanded`, unterstützt Enter/Leertaste/Escape, schließt Menüs bei Klick außerhalb und berücksichtigt verschachtelte Menüs sowie per CSS versteckte Desktop-/Mobil-Schalter. Er verändert ausschließlich vorhandene DOM-Elemente; er lädt keine Inhalte nach und führt keine fremden Skripte oder Eventhandler aus. Formulare und andere ursprüngliche Schaltflächen bleiben deaktiviert. Die CSP erlaubt nur die exakten SHA-256-Hashes der jeweils benötigten eigenen Controller, ohne `unsafe-inline` oder `unsafe-eval` für Skripte; `connect-src 'none'`, blockierte Frames und Worker bleiben erhalten. Seiten ohne erkannte Menüs und deaktivierte Linkziele erlauben weiterhin gar keine Skripte.
 
 `menue_manifest.json` dokumentiert die Erkennung, nicht zugeordnete Schalter und den freigegebenen Controller-Hash. Das Verhalten ist eine abgeleitete Bedienhilfe und keine originalgetreue Wiedergabe des fremden JavaScripts. Websites mit eigenen Menüstrukturen können eine angepasste Erkennungsregel benötigen; vom Server nachzuladende Menüs bleiben unvollständig. Die Funktion wirkt bei neuen Sicherungen und bei **„Ansicht aus Sicherung neu erzeugen“**; vorhandene Primärdaten werden nicht umgeschrieben.
 
@@ -130,7 +134,7 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 
 ## Öffentliche Version
 
-`1.0.0` ist die erste als öffentliche Veröffentlichung vorgesehene Version. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
+Aktueller Versionsstand: **1.1.0**. Die Änderungen gegenüber **1.0.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
 
 ## geplante Änderungen
 

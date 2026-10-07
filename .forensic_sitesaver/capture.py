@@ -33,6 +33,10 @@ from har_analysis import analyze_har, discover_har_files, read_har_document
 from tls_capture import capture_tls
 from reports import export_reports, write_capture_report
 from offline_menu import MENU_SCRIPT_HASH, PREFIX as MENU_PREFIX, append_menu_script, prepare_offline_menus
+from offline_links import (
+    LINK_SCRIPT_HASH, add_image_map_info_buttons, annotate_inactive_link,
+    append_link_inspector, clear_link_annotations,
+)
 
 ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base",
                "animate", "animatemotion", "animatetransform", "set"}
@@ -277,6 +281,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
 
     page_results: list[dict[str, Any]] = []
     menu_results: list[dict[str, Any]] = []
+    link_results: list[dict[str, Any]] = []
     for item in visited:
         html_file = pages_dir / item["html_name"]
         raw_source = case_root / item["raw_dom_relative"]
@@ -312,6 +317,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                 if low.startswith("on") or low in {"nonce", "integrity", "crossorigin", "ping", "target", "download"}:
                     del tag.attrs[attr]
 
+        clear_link_annotations(soup)
         menu_result = prepare_offline_menus(soup, item["final_url"], base_url)
         has_menus = bool(menu_result["menus"])
         menu_results.append({"page": item["html_name"], **menu_result})
@@ -326,21 +332,26 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                 control["disabled"] = "disabled"
 
         # Links: archived internal pages remain clickable, everything else becomes inert text/link marker.
+        inactive_links: list[dict[str, str]] = []
         for a in soup.find_all(["a", "area"]):
-            for attr in ("href", "xlink:href"):
-                href = str(a.get(attr) or "").strip()
-                if not href:
-                    continue
-                absolute = _url_without_fragment(urljoin(base_url, href))
-                target = page_map.get(absolute)
-                if target:
-                    fragment = urlparse(urljoin(base_url, href)).fragment
-                    a[attr] = _rel_link(html_file, target) + ("#" + fragment if fragment else "")
-                else:
-                    a["data-original-url"] = absolute
-                    a.attrs.pop(attr, None)
-                    a["title"] = "Ziel wurde nicht gesichert; kein externer Aufruf möglich."
-                    missing_references.append({"page": item["html_name"], "kind": "navigation", "url": absolute})
+            href = str(a.get("href") or a.get("xlink:href") or "").strip()
+            if not href:
+                continue
+            original_url = urljoin(base_url, href)
+            target = page_map.get(_url_without_fragment(original_url))
+            if target:
+                fragment = urlparse(original_url).fragment
+                local = _rel_link(html_file, target) + ("#" + fragment if fragment else "")
+                for attr in ("href", "xlink:href"):
+                    if a.has_attr(attr):
+                        a[attr] = local
+            else:
+                inactive_links.append(annotate_inactive_link(soup, a, original_url, item["final_url"]))
+                missing_references.append({"page": item["html_name"], "kind": "navigation", "url": original_url})
+        has_inactive_links = bool(inactive_links)
+        if has_inactive_links:
+            add_image_map_info_buttons(soup, item["final_url"])
+        link_results.append({"page": item["html_name"], "links": inactive_links})
 
         def local_resource(raw: str, kind: str) -> str | None:
             raw = raw.strip()
@@ -447,7 +458,8 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                 soup.insert(0, head)
         csp = soup.new_tag("meta")
         csp["http-equiv"] = "Content-Security-Policy"
-        script_source = f"'{MENU_SCRIPT_HASH}'" if has_menus else "'none'"
+        script_hashes = ([MENU_SCRIPT_HASH] if has_menus else []) + ([LINK_SCRIPT_HASH] if has_inactive_links else [])
+        script_source = " ".join(f"'{digest}'" for digest in script_hashes) or "'none'"
         csp["content"] = (
             f"default-src 'none'; script-src {script_source}; script-src-attr 'none'; connect-src 'none'; frame-src 'none'; "
             "child-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; "
@@ -460,8 +472,24 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
         marker["content"] = f"{APP_NAME} {APP_VERSION} – sichere lokale Auswertungsfassung"
         soup.head.insert(1, marker)
 
+        # page.content() and all derived files are UTF-8, regardless of the
+        # original response's encoding. CSP hashes must use that same text.
+        charset = soup.find("meta", charset=True)
+        if charset is None:
+            charset = soup.new_tag("meta", charset="utf-8")
+            soup.head.insert(2, charset)
+        else:
+            charset["charset"] = "utf-8"
+            charset.extract()
+            soup.head.insert(2, charset)
+        for meta in soup.find_all("meta"):
+            if str(meta.get("http-equiv") or "").lower() == "content-type":
+                meta["content"] = "text/html; charset=utf-8"
+
         if has_menus:
             append_menu_script(soup)
+        if has_inactive_links:
+            append_link_inspector(soup)
 
         write_text(html_file, str(soup))
         page_results.append({
@@ -476,7 +504,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
         f"<title>{APP_NAME} – lokaler Website-Spiegel</title>",
         "<style>body{font-family:sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}li{margin:.45rem 0}code{word-break:break-all}</style>",
         "</head><body>", f"<h1>{APP_NAME} – lokaler Website-Spiegel</h1>",
-        "<p>Originalskripte und externe Netzwerkzugriffe sind deaktiviert. Erkannte Menüs verwenden ausschließlich lokalen Menücode. Die HAR-Dateien sind die technische Primärquelle.</p><ol>",
+        "<p>Originalskripte und externe Netzwerkzugriffe sind deaktiviert. Menüs und die Anzeige ursprünglicher Linkziele verwenden ausschließlich lokalen Bediencode. Die HAR-Dateien sind die technische Primärquelle.</p><ol>",
     ]
     for p in page_results:
         index_lines.append(f"<li><a href='{html.escape(p['local_file'], quote=True)}'>{html.escape(p.get('title') or '(ohne Titel)')}</a><br><code>{html.escape(p['original_url'])}</code></li>")
@@ -490,9 +518,11 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
                "Nicht gesicherte Ressourcen und Navigationsziele stehen in fehlende_referenzen.json.\n"
                "Erkannte vorhandene Navigationsmenüs werden ausschließlich durch eigenen lokalen Menücode bedient, der per CSP-Hash freigegeben ist.\n"
                "Originalskripte, Inline-Eventhandler, Netzwerkanfragen und Formulare bleiben deaktiviert.\n"
+               "Deaktivierte Links zeigen ihre ursprüngliche vollständige Adresse als Text in einem lokalen Dialog; Kopieren baut keine Verbindung zum Ziel auf.\n"
                "Die Menüerkennung ist in menue_manifest.json dokumentiert; nachzuladende oder nicht erkannte Menüs können nicht bedient werden.\n")
     write_json(website / "website_manifest.json", {"created_at": iso_now(), "pages": page_results})
     write_json(website / "menue_manifest.json", {"controller_csp_hash": MENU_SCRIPT_HASH, "pages": menu_results})
+    write_json(website / "linkziele_manifest.json", {"controller_csp_hash": LINK_SCRIPT_HASH, "pages": link_results})
     write_json(website / "fehlende_referenzen.json", {"references": missing_references})
     write_json(website / "ressourcen_manifest.json", {"created_at": iso_now(), "resources": manifest_rows})
     write_csv(website / "ressourcen_manifest.csv", manifest_rows,

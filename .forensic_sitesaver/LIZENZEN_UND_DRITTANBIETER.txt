@@ -1,7 +1,7 @@
 Forensic SiteSaver – LIZENZ UND DRITTANBIETERHINWEISE
 ================================================================================
 
-Programmversion: 1.0.0
+Programmversion: 1.1.0
 Projekt / Quellcode: https://github.com/gl1tchb1rd/forensic_sitesaver
 Copyright (C) 2026 Forensic SiteSaver contributors
 

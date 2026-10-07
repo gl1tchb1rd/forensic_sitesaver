@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 from capture import _image_sources, build_local_mirror, rebuild_local_mirror
+from offline_links import LINK_SCRIPT_HASH
 
 
 PNG = base64.b64decode(
@@ -122,7 +123,9 @@ class LocalMirrorTests(unittest.TestCase):
             self.assertFalse(page.select_one("#next").has_attr("ping"))
             self.assertFalse(page.select_one("#external").has_attr("href"))
             self.assertFalse(page.select_one("#missing-page").has_attr("href"))
-            self.assertIsNone(page.find("script"))
+            self.assertEqual(len(page.find_all("script")), 1)
+            self.assertEqual(page.find("script")["data-forensic-sitesaver-controller"], "links")
+            self.assertIn(LINK_SCRIPT_HASH, page.find("meta", attrs={"http-equiv": "Content-Security-Policy"})["content"])
             self.assertIsNone(page.find("base"))
             self.assertIsNone(page.find("link", rel="dns-prefetch"))
             self.assertTrue(page.find("input").has_attr("disabled"))

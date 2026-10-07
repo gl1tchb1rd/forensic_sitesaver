@@ -146,6 +146,7 @@ def prepare_offline_menus(soup: BeautifulSoup, page_url: str, base_url: str) -> 
 
 def append_menu_script(soup: BeautifulSoup) -> None:
     script = soup.new_tag("script")
+    script["data-forensic-sitesaver-controller"] = "menu"
     script.string = MENU_SCRIPT
     # The document may be a fragment without a body; either location executes
     # after its menu markup has been parsed.

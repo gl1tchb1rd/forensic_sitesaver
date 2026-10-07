@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 
 from capture import build_local_mirror, rebuild_local_mirror
 from offline_menu import MENU_SCRIPT_HASH, PREFIX
+from offline_links import LINK_SCRIPT_HASH
 from test_local_mirror import BrowserTestCase, QuietHandler, make_case
 
 
@@ -82,11 +83,13 @@ class OfflineMenuTests(unittest.TestCase):
             build_local_mirror(root, visited)
             soup = BeautifulSoup((root / "02_website/seiten/1.html").read_text(), "html.parser")
             scripts = soup.find_all("script")
-            self.assertEqual(len(scripts), 1)
-            actual_hash = "sha256-" + base64.b64encode(hashlib.sha256(scripts[0].string.encode()).digest()).decode()
+            self.assertEqual(len(scripts), 2)
+            menu_script = soup.find("script", attrs={"data-forensic-sitesaver-controller": "menu"})
+            actual_hash = "sha256-" + base64.b64encode(hashlib.sha256(menu_script.string.encode()).digest()).decode()
             self.assertEqual(actual_hash, MENU_SCRIPT_HASH)
             csp = soup.find("meta", attrs={"http-equiv": "Content-Security-Policy"})["content"]
             self.assertIn(f"script-src '{actual_hash}'", csp)
+            self.assertIn(LINK_SCRIPT_HASH, csp)
             self.assertIn("script-src-attr 'none'", csp)
             self.assertIn("connect-src 'none'", csp)
             self.assertNotIn("'unsafe-inline'", csp.split("script-src ")[1].split(";")[0])
