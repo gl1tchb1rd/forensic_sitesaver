@@ -2,6 +2,11 @@
 
 ## Noch nicht veröffentlicht
 
+- Erkannte vorhandene Hamburger-Menüs und Dropdowns werden mit eigenem lokalem JavaScript bedienbar: CSP-Hashfreigabe ausschließlich dieses Controllers, Tastaturbedienung, verschachtelte Menüs und responsive Navigation. Originalskripte, fremde Eventhandler, Netzwerkanfragen und Formulare bleiben blockiert; `menue_manifest.json` dokumentiert die abgeleitete Bedienhilfe.
+- Lokaler Website-Spiegel: eingebettete Bilder und SVG-Bilder bleiben sichtbar; Bildvarianten, erfasste Lazy-Bilder, Basis-URLs, Ressourcen-Weiterleitungen und CSS-Importe werden lokal aufgelöst. Neue Sicherungen dokumentieren die vom Browser ausgewählten Bildquellen, ohne den Original-DOM zu verändern.
+- Navigation zwischen gesicherten Seiten erhält Sprungmarken und Image-Map-Verweise. Fehlende Ziele und Ressourcen werden in `fehlende_referenzen.json` ausgewiesen; der Index maskiert fremde Seitentitel und URLs als Text.
+- Neue GUI-Funktion und CLI-Befehl `mirror` erzeugen eine korrigierte Ansicht aus vorhandenen Sicherungen in einem separaten Ausgabeordner, ohne Primärdaten oder deren Prüfsummen zu verändern.
+- Regressionstests für Ressourcen, CSS, Navigation, unveränderte Primärdaten und Darstellung per Datei/HTTP in Chromium.
 - Ausführlicher Sicherungsvermerk mit Beschreibung von Browsersitzung, HAR-Aufzeichnung, Screenshots, lokalem Website-Spiegel und ergänzenden Auswertungen.
 - Tatsächlicher Sicherungsbeginn, Beginn und Ende der Browseraufzeichnung, Abschluss der Datenerhebung und Auswertung sowie gemessene Dauer.
 - Kennzahlen zu Seiten, HTTP-Fehlerseiten, Screenshots, Erfassungsfehlern, gespeicherter HAR-Datenmenge, verbleibenden Adressen und Laufparametern; zusätzliche `Sicherungsstatistik.json` im Primärbestand.

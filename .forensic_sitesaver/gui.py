@@ -162,6 +162,16 @@ class App(tk.Tk):
         ttk.Label(f,text="Der Crawler klickt keine Links und sendet keine Formulare; aktive Navigation erfolgt nur passiv per GET.",style="Hint.TLabel").grid(row=5,column=0,columnspan=3,sticky="w",pady=(5,8))
         ttk.Button(f,text="Sicherung starten",command=self.start_capture).grid(row=6,column=0,sticky="w")
         ttk.Button(f,text="Ausgabeordner öffnen",command=lambda:open_path(Path(self.cap_out.get()))).grid(row=6,column=1,sticky="w")
+        ttk.Button(f,text="Ansicht aus Sicherung neu erzeugen",command=self.rebuild_mirror).grid(row=7,column=0,columnspan=2,sticky="w",pady=(10,0))
+
+    def rebuild_mirror(self):
+        if self.runner.running:
+            return messagebox.showwarning("Vorgang läuft", "Es läuft bereits ein Vorgang.")
+        source=filedialog.askdirectory(title="Ursprünglichen Sicherungsordner auswählen",initialdir=self.cap_out.get())
+        if not source:return
+        output=filedialog.askdirectory(title="Neuen oder leeren Ausgabeordner außerhalb der Sicherung auswählen",initialdir=str(Path(source).parent))
+        if not output:return
+        self.runner.start(["mirror","--source",source,"--output",output],"Lokale Ansicht aus vorhandener Sicherung erzeugen")
 
     def _domain_tab(self):
         f=self.t_domain

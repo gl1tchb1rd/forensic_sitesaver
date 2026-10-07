@@ -65,10 +65,13 @@ def write_capture_report(case_root: Path, statistics: dict[str, Any]) -> None:
         "Die gesonderte TLS-Zertifikatserhebung wird im TLS-Bericht dokumentiert.", "",
         "ABGESICHERTE LOKALE AUSWERTUNGSFASSUNG",
         "Aus den gespeicherten Seiteninhalten und den erfassten Ressourcen wird ein lokaler Website-Spiegel "
-        "erstellt. JavaScript, Frames und weitere aktive Inhalte werden entfernt oder neutralisiert; "
+        "erstellt. Originalskripte, Frames und weitere fremde aktive Inhalte werden entfernt oder neutralisiert; "
         "Formulare werden deaktiviert. Verweise werden auf vorhandene lokale Dateien umgeschrieben "
-        "oder stillgelegt. Eine Content Security Policy unterbindet aktive Inhalte und externe "
-        "Netzwerk-Nachladevorgänge in der lokalen Auswertungsfassung.", "",
+        "oder stillgelegt. Vorhandene erkannte Navigationsmenüs werden durch eigenen lokalen Menücode "
+        "bedient, der ausschließlich per CSP-Hash freigegeben wird. Er öffnet und schließt vorhandene "
+        "Menüelemente, ohne Originalskripte auszuführen oder Inhalte nachzuladen. Erkennung und Hash "
+        "werden in 02_website/menue_manifest.json dokumentiert. Eine Content Security Policy blockiert "
+        "fremde Skripte, Inline-Eventhandler und externe Netzwerk-Nachladevorgänge in der lokalen Auswertungsfassung.", "",
         "Erfasste Bilder, Stylesheets, Fonts und Medien werden, soweit für die lokale Darstellung vorgesehen "
         "und verfügbar, byteidentisch aus der HAR-Sicherung extrahiert. Für Stylesheets werden zusätzlich "
         "angepasste Laufzeitkopien erzeugt. Die lokale Darstellung kann deshalb von der ursprünglichen "

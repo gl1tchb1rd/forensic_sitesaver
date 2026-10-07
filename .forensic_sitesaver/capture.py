@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import mimetypes
 import os
@@ -16,7 +17,7 @@ from collections import deque
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -31,11 +32,13 @@ from domain_analysis import analyze_domain
 from har_analysis import analyze_har, discover_har_files, read_har_document
 from tls_capture import capture_tls
 from reports import export_reports, write_capture_report
+from offline_menu import MENU_SCRIPT_HASH, PREFIX as MENU_PREFIX, append_menu_script, prepare_offline_menus
 
-ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base"}
+ACTIVE_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "portal", "base",
+               "animate", "animatemotion", "animatetransform", "set"}
 RESOURCE_MIME_PREFIXES = ("image/", "font/", "audio/", "video/", "text/css")
 CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.I)
-CSS_IMPORT_RE = re.compile(r"@import\s+(?:url\()?\s*(['\"]?)([^'\")\s;]+)\1\s*\)?", re.I)
+CSS_IMPORT_RE = re.compile(r"@import\s+(['\"])(.*?)\1", re.I)
 
 
 def _url_without_fragment(url: str) -> str:
@@ -97,52 +100,100 @@ def _safe_resource_mime(mime: str) -> bool:
 
 
 def _rel_link(from_file: Path, to_file: Path) -> str:
-    return os.path.relpath(to_file, from_file.parent).replace(os.sep, "/")
+    return quote(os.path.relpath(to_file, from_file.parent).replace(os.sep, "/"), safe="/")
+
+
+def _srcset_candidates(value: str) -> list[tuple[str, str]]:
+    """Read candidate URLs without splitting the commas inside data URLs."""
+    candidates = []
+    position = 0
+    while position < len(value):
+        while position < len(value) and (value[position].isspace() or value[position] == ","):
+            position += 1
+        start = position
+        while position < len(value) and not value[position].isspace():
+            position += 1
+        url = value[start:position]
+        if not url:
+            break
+        if url.endswith(","):
+            candidates.append((url.rstrip(","), ""))
+            continue
+        start = position
+        while position < len(value) and value[position] != ",":
+            position += 1
+        descriptor = value[start:position].strip()
+        # Invalid descriptors cannot be selected by the browser.
+        if not descriptor or re.fullmatch(r"(?:[1-9]\d*w|(?:\d+(?:\.\d+)?|\.\d+)x)", descriptor):
+            candidates.append((url, descriptor))
+        position += 1
+    return candidates
+
+
+def _image_sources(page: Any) -> list[str]:
+    """Record selected image URLs separately, without modifying the raw DOM."""
+    try:
+        sources = page.evaluate("""() => Array.from(document.images, image =>
+            image.complete && image.naturalWidth ? image.currentSrc : '')""")
+        if isinstance(sources, list) and all(isinstance(source, str) for source in sources):
+            return sources
+    except Exception:
+        pass
+    return []
 
 
 def _rewrite_css(css_text: str, css_url: str, css_runtime_file: Path,
-                 url_map: dict[str, dict[str, Any]], runtime_css_map: dict[str, Path]) -> str:
+                 url_map: dict[str, dict[str, Any]], runtime_css_map: dict[str, Path],
+                 missing_references: list[dict[str, str]] | None = None) -> str:
+    def missing(url: str, kind: str) -> None:
+        if missing_references is not None:
+            missing_references.append({"page": css_runtime_file.name, "kind": kind, "url": url})
+
     def resolve_resource(raw: str) -> str:
         raw = raw.strip().strip('"\'')
-        if not raw or raw.startswith(("data:", "#")):
+        if not raw or raw.lower().startswith("data:") or raw.startswith("#"):
             return raw
-        absolute = _url_without_fragment(urljoin(css_url, raw))
+        resolved = urljoin(css_url, raw)
+        absolute = _url_without_fragment(resolved)
         rec = url_map.get(absolute)
         if not rec:
+            missing(resolved, "css-url")
             return "data:,"
-        if rec.get("mime", "").lower().startswith("image/svg"):
-            return "data:,"
-        target = rec.get("local_path")
+        target = runtime_css_map.get(absolute) or rec.get("local_path")
         if not target:
             return "data:,"
-        return _rel_link(css_runtime_file, target)
+        fragment = urlparse(resolved).fragment
+        return _rel_link(css_runtime_file, target) + ("#" + fragment if fragment else "")
 
     def repl_url(m: re.Match[str]) -> str:
         return f'url("{resolve_resource(m.group(2))}")'
-
-    text = CSS_URL_RE.sub(repl_url, css_text)
 
     def repl_import(m: re.Match[str]) -> str:
         raw = m.group(2).strip()
         absolute = _url_without_fragment(urljoin(css_url, raw))
         target = runtime_css_map.get(absolute)
         if not target:
+            missing(absolute, "css-import")
             return "/* Forensic SiteSaver: externer/fehlender @import blockiert */"
-        return f'@import url("{_rel_link(css_runtime_file, target)}")'
+        return f'@import "{_rel_link(css_runtime_file, target)}"'
 
-    return CSS_IMPORT_RE.sub(repl_import, text)
+    # Quoted imports retain quotes; url() imports go through resolve_resource,
+    # which selects the derived CSS copy rather than the untouched original.
+    return CSS_URL_RE.sub(repl_url, CSS_IMPORT_RE.sub(repl_import, css_text))
 
 
-def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[str, Any]:
-    website = ensure_dir(case_root / "02_website")
+def build_local_mirror(case_root: Path, visited: list[dict[str, Any]], *,
+                       output_dir: Path | None = None) -> dict[str, Any]:
+    website = ensure_dir(output_dir if output_dir is not None else case_root / "02_website")
     pages_dir = ensure_dir(website / "seiten")
     resources_dir = ensure_dir(website / "ressourcen")
     runtime_css_dir = ensure_dir(website / "_runtime_css")
-    raw_dom_dir = ensure_dir(website / "_dom_roh")
     har_files = discover_har_files(case_root / "01_har")
 
     url_map: dict[str, dict[str, Any]] = {}
     manifest_rows: list[dict[str, Any]] = []
+    redirects: dict[str, str] = {}
+    missing_references: list[dict[str, str]] = []
 
     # Extract safe-to-view resources byte-identically. HAR remains the source for everything else.
     for segment in har_files:
@@ -153,11 +204,24 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         for entry in ((doc.get("log") or {}).get("entries") or []):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
-            url = _url_without_fragment(str(req.get("url") or ""))
-            if not url or url in url_map:
+            raw_url = str(req.get("url") or "")
+            if urlparse(raw_url).scheme not in {"http", "https"}:
+                continue
+            url = _url_without_fragment(raw_url)
+            if url in url_map:
+                continue
+            status = int(resp.get("status") or 0)
+            if 300 <= status < 400 and resp.get("redirectURL"):
+                redirects[url] = _url_without_fragment(urljoin(url, resp["redirectURL"]))
+                continue
+            if not 200 <= status < 300:
                 continue
             content = resp.get("content") or {}
-            mime = str(content.get("mimeType") or "").split(";", 1)[0].lower()
+            headers = {str(h.get("name") or "").lower(): str(h.get("value") or "")
+                       for h in resp.get("headers") or []}
+            mime = str(content.get("mimeType") or headers.get("content-type") or "").split(";", 1)[0].lower().strip()
+            if mime in {"", "application/octet-stream"}:
+                mime = mimetypes.guess_type(urlparse(url).path)[0] or mime
             if not _safe_resource_mime(mime):
                 continue
             body = _har_body(segment, content)
@@ -179,6 +243,16 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
             url_map[url] = rec
             manifest_rows.append({k: v for k, v in rec.items() if k != "local_path"})
 
+    # The DOM often retains the pre-redirect image URL; HAR stores the body at
+    # the final URL. Resolve aliases only to an actually archived resource.
+    for original, target in redirects.items():
+        seen_redirects = {original}
+        while target in redirects and target not in seen_redirects:
+            seen_redirects.add(target)
+            target = redirects[target]
+        if target in url_map:
+            url_map[original] = url_map[target]
+
     # Runtime CSS copies – original CSS above remains byte-identical.
     runtime_css_map: dict[str, Path] = {}
     for url, rec in url_map.items():
@@ -189,7 +263,7 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         rec = url_map[url]
         try:
             original = rec["local_path"].read_text(encoding="utf-8", errors="replace")
-            rewritten = _rewrite_css(original, url, target, url_map, runtime_css_map)
+            rewritten = _rewrite_css(original, url, target, url_map, runtime_css_map, missing_references)
             write_text(target, rewritten)
         except Exception:
             write_text(target, "/* CSS konnte nicht für die sichere Laufzeitfassung verarbeitet werden. */")
@@ -201,19 +275,8 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         if item.get("requested_url"):
             page_map[_url_without_fragment(item["requested_url"])] = pages_dir / item["html_name"]
 
-    def rewrite_inline_css(value: str, base_url: str, html_file: Path) -> str:
-        def repl(m: re.Match[str]) -> str:
-            raw = m.group(2).strip()
-            if raw.startswith(("data:", "#")):
-                return m.group(0)
-            absolute = _url_without_fragment(urljoin(base_url, raw))
-            rec = url_map.get(absolute)
-            if not rec or rec.get("mime", "").startswith("image/svg"):
-                return 'url("data:,")'
-            return f'url("{_rel_link(html_file, rec["local_path"])}")'
-        return CSS_URL_RE.sub(repl, value)
-
     page_results: list[dict[str, Any]] = []
+    menu_results: list[dict[str, Any]] = []
     for item in visited:
         html_file = pages_dir / item["html_name"]
         raw_source = case_root / item["raw_dom_relative"]
@@ -222,6 +285,19 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         raw_html = raw_source.read_text(encoding="utf-8", errors="replace")
         soup = BeautifulSoup(raw_html, "html.parser")
         base_url = item["final_url"]
+        base = soup.find("base", href=True)
+        if base:
+            base_url = urljoin(base_url, str(base["href"]))
+
+        for img, selected in zip(soup.find_all("img"), item.get("image_sources") or []):
+            if selected and (selected.lower().startswith("data:") or _url_without_fragment(selected) in url_map):
+                img["src"] = selected
+                img.attrs.pop("srcset", None)
+                img.attrs.pop("data-srcset", None)
+                picture = img.find_parent("picture")
+                if picture:
+                    for source in list(picture.find_all("source")):
+                        source.decompose()
 
         for tag in list(soup.find_all(ACTIVE_TAGS)):
             tag.decompose()
@@ -233,8 +309,12 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         for tag in soup.find_all(True):
             for attr in list(tag.attrs):
                 low = attr.lower()
-                if low.startswith("on") or low in {"nonce", "integrity", "crossorigin"}:
+                if low.startswith("on") or low in {"nonce", "integrity", "crossorigin", "ping", "target", "download"}:
                     del tag.attrs[attr]
+
+        menu_result = prepare_offline_menus(soup, item["final_url"], base_url)
+        has_menus = bool(menu_result["menus"])
+        menu_results.append({"page": item["html_name"], **menu_result})
 
         # Forms become inert; controls stay visible but disabled.
         for form in soup.find_all("form"):
@@ -242,39 +322,90 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
             form.attrs.pop("method", None)
             form["data-forensic-sitesaver-form-disabled"] = "true"
         for control in soup.find_all(["input", "button", "select", "textarea"]):
-            control["disabled"] = "disabled"
+            if not (control.name == "button" and control.has_attr(MENU_PREFIX + "controls")):
+                control["disabled"] = "disabled"
 
         # Links: archived internal pages remain clickable, everything else becomes inert text/link marker.
-        for a in soup.find_all("a"):
-            href = str(a.get("href") or "")
-            if not href:
-                continue
-            absolute = _url_without_fragment(urljoin(base_url, href))
-            target = page_map.get(absolute)
-            if target:
-                a["href"] = _rel_link(html_file, target)
-            else:
-                a["data-original-url"] = absolute
-                a["href"] = "#"
+        for a in soup.find_all(["a", "area"]):
+            for attr in ("href", "xlink:href"):
+                href = str(a.get(attr) or "").strip()
+                if not href:
+                    continue
+                absolute = _url_without_fragment(urljoin(base_url, href))
+                target = page_map.get(absolute)
+                if target:
+                    fragment = urlparse(urljoin(base_url, href)).fragment
+                    a[attr] = _rel_link(html_file, target) + ("#" + fragment if fragment else "")
+                else:
+                    a["data-original-url"] = absolute
+                    a.attrs.pop(attr, None)
+                    a["title"] = "Ziel wurde nicht gesichert; kein externer Aufruf möglich."
+                    missing_references.append({"page": item["html_name"], "kind": "navigation", "url": absolute})
 
-        def rewrite_attr(tag: Any, attr: str, allow_svg: bool = False) -> None:
-            raw = str(tag.get(attr) or "")
+        def local_resource(raw: str, kind: str) -> str | None:
+            raw = raw.strip()
+            if raw.lower().startswith("data:") or raw.startswith("#"):
+                return raw
+            absolute_url = urljoin(base_url, raw)
+            rec = url_map.get(_url_without_fragment(absolute_url))
+            if rec:
+                fragment = urlparse(absolute_url).fragment
+                return _rel_link(html_file, rec["local_path"]) + ("#" + fragment if fragment else "")
+            missing_references.append({"page": item["html_name"], "kind": kind, "url": absolute_url})
+            return None
+
+        def rewrite_attr(tag: Any, attr: str) -> None:
+            raw = str(tag.get(attr) or "").strip()
             if not raw:
                 return
-            absolute = _url_without_fragment(urljoin(base_url, raw))
-            rec = url_map.get(absolute)
-            if rec and (allow_svg or not rec.get("mime", "").startswith("image/svg")):
-                tag[attr] = _rel_link(html_file, rec["local_path"])
+            local = local_resource(raw, attr)
+            if local is not None:
+                tag[attr] = local
             else:
-                tag[f"data-original-{attr}"] = absolute
+                tag[f"data-original-{attr}"] = urljoin(base_url, raw)
                 tag[attr] = "data:,"
 
         for img in soup.find_all("img"):
+            # Lazy attributes are only useful when their body already exists in
+            # HAR. Do not make additional requests while building the mirror.
+            if not img.get("src") or str(img.get("src")).lower().startswith("data:"):
+                for lazy_attr in ("data-src", "data-lazy-src", "data-original"):
+                    candidate = str(img.get(lazy_attr) or "")
+                    if candidate and _url_without_fragment(urljoin(base_url, candidate)) in url_map:
+                        img["src"] = candidate
+                        break
             rewrite_attr(img, "src")
-            if img.get("srcset"):
-                del img["srcset"]
+            img["loading"] = "eager"
+        for tag in soup.find_all(["img", "source"]):
+            srcset = str(tag.get("srcset") or tag.get("data-srcset") or "")
+            if srcset:
+                candidates = []
+                fallback = None
+                for raw, descriptor in _srcset_candidates(srcset):
+                    local = local_resource(raw, "srcset")
+                    if local is not None:
+                        if fallback is None:
+                            fallback = local
+                        candidates.append(local + (" " + descriptor if descriptor else ""))
+                if candidates:
+                    tag["srcset"] = ", ".join(candidates)
+                    if tag.name == "img" and (not tag.get("src") or tag.has_attr("data-original-src")):
+                        # A blocked src otherwise becomes a broken 1x candidate
+                        # and can win over the only archived (e.g. 2x) variant.
+                        tag["src"] = fallback
+                else:
+                    tag.attrs.pop("srcset", None)
         for media in soup.find_all(["audio", "video", "source"]):
             rewrite_attr(media, "src")
+        # SVG images are inert in an <img>/CSS image context. External SVG use
+        # references are neutralized; local fragment references stay intact.
+        for image in soup.find_all("image"):
+            for attr in ("href", "xlink:href"):
+                rewrite_attr(image, attr)
+        for use in soup.find_all("use"):
+            for attr in ("href", "xlink:href"):
+                if use.has_attr(attr) and not str(use[attr]).startswith("#"):
+                    use.attrs.pop(attr, None)
         for video in soup.find_all("video"):
             rewrite_attr(video, "poster")
         for tag in soup.find_all(attrs={"background": True}):
@@ -292,23 +423,22 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
                     link.attrs.pop("integrity", None)
                     link.attrs.pop("crossorigin", None)
                 else:
+                    missing_references.append({"page": item["html_name"], "kind": "stylesheet", "url": absolute})
                     link.decompose()
-            elif href and urlparse(urljoin(base_url, href)).scheme in {"http", "https"}:
-                # favicon/preload/etc. only if captured local resource exists.
-                absolute = _url_without_fragment(urljoin(base_url, href))
-                rec = url_map.get(absolute)
-                if rec and not rec.get("mime", "").startswith("image/svg"):
-                    link["href"] = _rel_link(html_file, rec["local_path"])
-                else:
-                    link.decompose()
+            elif "icon" in rels and href:
+                rewrite_attr(link, "href")
+            else:
+                # Preconnect, DNS-prefetch and preload are unnecessary offline.
+                link.decompose()
 
         for tag in soup.find_all(style=True):
-            tag["style"] = rewrite_inline_css(str(tag.get("style") or ""), base_url, html_file)
+            tag["style"] = _rewrite_css(str(tag.get("style") or ""), base_url, html_file, url_map, runtime_css_map, missing_references)
         for style_tag in soup.find_all("style"):
             if style_tag.string:
-                style_tag.string.replace_with(rewrite_inline_css(style_tag.string, base_url, html_file))
+                style_tag.string.replace_with(_rewrite_css(style_tag.string, base_url, html_file, url_map, runtime_css_map, missing_references))
 
-        # CSP blocks every network-capable/active category. file: is required when pages are opened directly.
+        # Only our fixed menu controller may execute; original code remains
+        # removed. file: supports opening the viewing copy directly.
         if soup.head is None:
             head = soup.new_tag("head")
             if soup.html:
@@ -317,11 +447,12 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
                 soup.insert(0, head)
         csp = soup.new_tag("meta")
         csp["http-equiv"] = "Content-Security-Policy"
+        script_source = f"'{MENU_SCRIPT_HASH}'" if has_menus else "'none'"
         csp["content"] = (
-            "default-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; "
+            f"default-src 'none'; script-src {script_source}; script-src-attr 'none'; connect-src 'none'; frame-src 'none'; "
             "child-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; "
-            "form-action 'none'; base-uri 'none'; img-src data: file:; style-src 'unsafe-inline' file:; "
-            "font-src data: file:; media-src data: file:"
+            "form-action 'none'; base-uri 'none'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline' file:; "
+            "font-src 'self' data: file:; media-src 'self' data: file:"
         )
         soup.head.insert(0, csp)
         marker = soup.new_tag("meta")
@@ -329,9 +460,12 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         marker["content"] = f"{APP_NAME} {APP_VERSION} – sichere lokale Auswertungsfassung"
         soup.head.insert(1, marker)
 
+        if has_menus:
+            append_menu_script(soup)
+
         write_text(html_file, str(soup))
         page_results.append({
-            "index": item["index"], "title": item.get("title"), "original_url": base_url,
+            "index": item["index"], "title": item.get("title"), "original_url": item["final_url"],
             "local_file": html_file.relative_to(website).as_posix(),
         })
 
@@ -342,21 +476,53 @@ def build_local_mirror(case_root: Path, visited: list[dict[str, Any]]) -> dict[s
         f"<title>{APP_NAME} – lokaler Website-Spiegel</title>",
         "<style>body{font-family:sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}li{margin:.45rem 0}code{word-break:break-all}</style>",
         "</head><body>", f"<h1>{APP_NAME} – lokaler Website-Spiegel</h1>",
-        "<p>Aktive Inhalte und externe Netzwerkzugriffe sind deaktiviert. Die HAR-Dateien sind die technische Primärquelle.</p><ol>",
+        "<p>Originalskripte und externe Netzwerkzugriffe sind deaktiviert. Erkannte Menüs verwenden ausschließlich lokalen Menücode. Die HAR-Dateien sind die technische Primärquelle.</p><ol>",
     ]
     for p in page_results:
-        index_lines.append(f"<li><a href='{p['local_file']}'>{p.get('title') or '(ohne Titel)'}</a><br><code>{p['original_url']}</code></li>")
+        index_lines.append(f"<li><a href='{html.escape(p['local_file'], quote=True)}'>{html.escape(p.get('title') or '(ohne Titel)')}</a><br><code>{html.escape(p['original_url'])}</code></li>")
     index_lines += ["</ol></body></html>"]
     write_text(website / "index.html", "\n".join(index_lines))
     write_text(website / "NETZWERKSICHERHEIT.txt",
                f"{APP_NAME} {APP_VERSION}\n\nDiese lokale Auswertungsfassung entfernt/neutralisiert aktive Inhalte und externe Netzwerkverweise.\n"
                "Originale Netzwerkkommunikation und Response-Inhalte bleiben in 01_har erhalten.\n"
-               "Originale extrahierte Ressourcen unter ressourcen/ werden byteidentisch gespeichert; CSS wird für die sichere Darstellung zusätzlich als Laufzeitkopie erzeugt.\n")
+               "Originale extrahierte Ressourcen unter ressourcen/ werden byteidentisch gespeichert; CSS wird für die sichere Darstellung zusätzlich als Laufzeitkopie erzeugt.\n"
+               "SVG-Dateien werden nur als passive Bilder verwendet; externe SVG-use-Verweise und SVG-Animationen werden entfernt.\n"
+               "Nicht gesicherte Ressourcen und Navigationsziele stehen in fehlende_referenzen.json.\n"
+               "Erkannte vorhandene Navigationsmenüs werden ausschließlich durch eigenen lokalen Menücode bedient, der per CSP-Hash freigegeben ist.\n"
+               "Originalskripte, Inline-Eventhandler, Netzwerkanfragen und Formulare bleiben deaktiviert.\n"
+               "Die Menüerkennung ist in menue_manifest.json dokumentiert; nachzuladende oder nicht erkannte Menüs können nicht bedient werden.\n")
     write_json(website / "website_manifest.json", {"created_at": iso_now(), "pages": page_results})
+    write_json(website / "menue_manifest.json", {"controller_csp_hash": MENU_SCRIPT_HASH, "pages": menu_results})
+    write_json(website / "fehlende_referenzen.json", {"references": missing_references})
     write_json(website / "ressourcen_manifest.json", {"created_at": iso_now(), "resources": manifest_rows})
     write_csv(website / "ressourcen_manifest.csv", manifest_rows,
               ["original_url", "mime", "http_status", "size", "sha256", "local_relative", "har_segment", "byte_preserved"])
     return {"pages": len(page_results), "resources": len(manifest_rows)}
+
+
+def rebuild_local_mirror(source: Path, output: Path) -> dict[str, Any]:
+    """Build a new viewing copy outside the original evidence directory."""
+    source = source.expanduser().resolve()
+    output = output.expanduser().resolve()
+    if output == source or source in output.parents:
+        raise ValueError("Die neue Ansicht muss außerhalb des ursprünglichen Sicherungsordners liegen.")
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise ValueError("Der Ausgabeordner muss neu oder leer sein.")
+    visited = json.loads((source / "04_metadaten/visited_pages.json").read_text(encoding="utf-8"))
+    if not isinstance(visited, list) or not visited:
+        raise ValueError("Die Sicherung enthält keine gespeicherte Seitenliste.")
+    if not (source / "01_har").is_dir():
+        raise ValueError("Der HAR-Ordner der Sicherung fehlt.")
+    for item in visited:
+        raw = (source / item["raw_dom_relative"]).resolve()
+        if source not in raw.parents or not raw.is_file():
+            raise ValueError("Eine gespeicherte DOM-Datei fehlt oder liegt außerhalb der Sicherung.")
+        if Path(item["html_name"]).name != item["html_name"] or "\\" in item["html_name"]:
+            raise ValueError("Ungültiger Dateiname in der gespeicherten Seitenliste.")
+    result = build_local_mirror(source, visited, output_dir=output)
+    write_text(output / "QUELLE.txt", f"Abgeleitete Ansicht aus: {source}\nErstellt: {iso_now()}\n"
+               "Die ursprüngliche Sicherung wurde ausschließlich gelesen.\n")
+    return result
 
 
 def _write_size_report(case_root: Path) -> None:
@@ -503,6 +669,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                     raw_dom = dirs["02_website"] / "_dom_roh" / f"{index:04d}.dom.txt"
                     ensure_dir(raw_dom.parent)
                     raw_dom.write_text(page.content(), encoding="utf-8", newline="\n")
+                    image_sources = _image_sources(page)
                     screenshot_name = f"{Path(html_name).stem}.png"
                     screenshot_file = dirs["03_screenshots"] / screenshot_name
                     try:
@@ -515,6 +682,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                         "index": index, "requested_url": requested, "final_url": final_url, "status": status,
                         "title": title, "html_name": html_name,
                         "raw_dom_relative": raw_dom.relative_to(case_root).as_posix(),
+                        "image_sources": image_sources,
                         "screenshot": f"03_screenshots/{screenshot_name}",
                     }
                     visited.append(item)
@@ -522,11 +690,13 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
 
                     # Passive discovery from rendered DOM. No link is clicked.
                     soup = BeautifulSoup(page.content(), "html.parser")
-                    for a in soup.find_all("a", href=True):
+                    base = soup.find("base", href=True)
+                    discovery_base = urljoin(final_url, str(base["href"])) if base else final_url
+                    for a in soup.find_all(["a", "area"], href=True):
                         raw = str(a.get("href") or "").strip()
                         if not raw or raw.startswith(("#", "javascript:", "mailto:", "tel:", "data:")):
                             continue
-                        target = _url_without_fragment(urljoin(final_url, raw))
+                        target = _url_without_fragment(urljoin(discovery_base, raw))
                         p = urlparse(target)
                         if p.scheme not in {"http", "https"}:
                             continue

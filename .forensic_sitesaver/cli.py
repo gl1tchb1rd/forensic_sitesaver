@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from common import APP_NAME, APP_VERSION, hostname_from_value, sanitize_component, timestamp_slug
-from capture import capture_website
+from capture import capture_website, rebuild_local_mirror
 from domain_analysis import analyze_domain, supplement_origin_ip
 from har_analysis import analyze_har
 from license_tools import generate_installed_license_report
@@ -28,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--delay-ms", type=int, default=500)
     c.add_argument("--timeout-ms", type=int, default=30000)
     c.add_argument("--allow-host", action="append", default=[])
+
+    m = sub.add_parser("mirror", help="Neue lokale Ansicht aus vorhandener Sicherung erzeugen (ohne Netzwerk)")
+    m.add_argument("--source", type=Path, required=True, help="Ursprünglicher Sicherungsordner")
+    m.add_argument("--output", type=Path, required=True, help="Neuer oder leerer Ordner außerhalb der Sicherung")
 
     d = sub.add_parser("domain", help="Eigenständige Domain-/Hosting-/MX-Analyse")
     d.add_argument("domain")
@@ -59,6 +63,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.command == "mirror":
+        try:
+            result = rebuild_local_mirror(args.source, args.output)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            raise SystemExit(f"Ansicht konnte nicht erzeugt werden: {exc}") from exc
+        print(f"Neue lokale Ansicht: {result['pages']} Seiten, {result['resources']} Ressourcen")
+        print(f"ERGEBNIS_ORDNER={args.output.expanduser().resolve()}")
+        return 0
     if args.command == "capture":
         if args.max_pages < 0 or args.segment_pages < 1 or args.delay_ms < 0 or args.timeout_ms < 1000:
             raise SystemExit("Ungültige Crawl-Parameter.")
