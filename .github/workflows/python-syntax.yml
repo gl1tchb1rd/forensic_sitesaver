@@ -22,4 +22,4 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python sources
-        run: python -m compileall -q gl1tchb1rd_forensic_sitesaver.py .gl1tchb1rd
+        run: python -m compileall -q forensic_sitesaver.py .forensic_sitesaver
