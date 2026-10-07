@@ -71,7 +71,10 @@ def write_capture_report(case_root: Path, statistics: dict[str, Any]) -> None:
         "Die gesonderte TLS-Zertifikatserhebung wird im TLS-Bericht dokumentiert.", "",
         "ABGESICHERTE LOKALE AUSWERTUNGSFASSUNG",
         "Aus den gespeicherten Seiteninhalten und den erfassten Ressourcen wird ein lokaler Website-Spiegel "
-        "erstellt. Originalskripte, Frames und weitere fremde aktive Inhalte werden entfernt oder neutralisiert; "
+        "durch das aus K25-SiteSaver übernommene Spiegelmodul erstellt. Ressourcenextraktion, CSS-Laufzeitkopien, "
+        "HTML-Lokalisierung und abschließende Prüfung werden darin gemeinsam ausgeführt. Das Erstellungsmodul "
+        "und die Prüfung aktiver Netz-/Skriptverweise werden im Website-Manifest dokumentiert. "
+        "Originalskripte, Frames und weitere fremde aktive Inhalte werden entfernt oder neutralisiert; "
         "Formulare werden deaktiviert. Verweise werden auf vorhandene lokale Dateien umgeschrieben "
         "oder stillgelegt. Stillgelegte Linkziele bleiben als Text einschließlich Parametern und "
         "Sprungmarken sichtbar; ein eigener lokaler Linkcontroller zeigt sie in einem Dialog mit "

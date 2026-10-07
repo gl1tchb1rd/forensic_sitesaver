@@ -2,6 +2,9 @@
 
 ## Noch nicht veröffentlicht
 
+- Die vollständige Vorschauerstellung aus K25-SiteSaver v1.5 ersetzt den bisherigen Erstellungsweg: Ressourcenextraktion, CSS-Laufzeitkopien, HTML-Lokalisierung, Index und Prüfung der fertigen Ansicht sind als `website_mirror.py` übernommen und an Version 1.1 angebunden. Menüs, Linkziel-Dialoge, Diagnoseformate, passive SVG-Bilder und unveränderte Primärdaten bleiben erhalten; gemeinsame HAR-/URL-/CSS-Hilfen sind in `mirror_support.py` ausgelagert.
+- Tatsächlich gespeicherte Bildinhalte aus HTTP-304-Antworten werden wieder angezeigt; leere Cache-Antworten bleiben als fehlender Inhalt diagnostiziert. Der K25-Reader überspringt ungültige HAR-Dokumentkandidaten. Lokale Bildvarianten bleiben vom Browser auswählbar, und aufgezeichnete passive Ressourcen sind wie in K25 direkt verlinkt.
+- Zusätzliche Chromium-Tests prüfen echte JPEG-Daten, Datei-/HTTP-Ansichten, unterschiedliche Bildschirmbreiten, Menüs, lokale Bildlinks, unveränderte Primärdaten und die Prüfung freigegebener Controller.
 - Erkannte Dropdown-Untermenüs öffnen wieder beim Darüberfahren mit der Maus über den ursprünglichen Menülink. Der Wechsel ins Untermenü, lokale Seitenlinks, Touch-Schalter und Tastaturbedienung bleiben nutzbar; Originalskripte und Netzwerkverbindungen bleiben gesperrt. Ein Chromium-Test prüft die Newsup-/SmartMenus-Struktur aus dem gemeldeten Feuerwehr-DOM per Datei und HTTP.
 - Bewährte Teile der Website-Spiegel-Erstellung aus K25-SiteSaver übernommen: HAR-Anhänge über `_file`/`_sha1`, abweichende ZIP-Unterordner und separate Anhänge neben HAR-Dateien werden gelesen. Mehrdeutige Zuordnungen und Pfade außerhalb des HAR-Ordners werden abgewiesen.
 - Passive Ressourcen behalten alle unterschiedlichen aufgezeichneten Inhaltsfassungen; die zuletzt erfolgreich gesicherte Fassung wird angezeigt. Dateiendungen richten sich nach dem Inhaltstyp, Dateinamen berücksichtigen Windows-Sondernamen und ältere Font-Inhaltstypen bleiben nutzbar.
