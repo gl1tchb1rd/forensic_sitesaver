@@ -1,5 +1,13 @@
 # Changelog
 
+## Noch nicht veröffentlicht
+
+- Neue Sicherungen laden Lazy-Bilder unterhalb des sichtbaren Ausschnitts durch begrenztes Scrollen während der HAR-Aufzeichnung. Die ursprüngliche Scrollposition wird wiederhergestellt; Ergebnis und Grenzen werden je Seite dokumentiert.
+- Bildzuordnung berücksichtigt kodierte Umlaute/Leerzeichen, maskierte CSS-URLs, `image-set(...)`, relative Bildpfade in weitergeleiteten Stylesheets und aussagekräftige Content-Type-Header bei generischen HAR-Inhaltstypen.
+- Gesicherte Lazy-Ziele ersetzen fehlende Platzhalter; nicht nutzbare `picture`-Quellen verdecken gesicherte Ersatzbilder nicht mehr.
+- `fehlende_referenzen.json` unterscheidet fehlende HAR-Einträge, fehlende Response-Inhalte, HTTP-Fehler, ausgebliebene Antworten, ungeeignete Inhaltstypen und nicht gesicherte Weiterleitungsziele.
+- Zusätzliche Chromium-Regressionstests prüfen die Aufnahme von Lazy-Bildern, CSS-Bildvarianten, Datei-/HTTP-Ansichten und unveränderte Quelldaten.
+
 ## 1.1.0
 
 ### Neue Funktionen
