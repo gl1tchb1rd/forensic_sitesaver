@@ -1,15 +1,15 @@
 {
   "tool": "Forensic SiteSaver",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "repository": "https://github.com/gl1tchb1rd/forensic_sitesaver",
   "files": {
-    ".forensic_sitesaver/CHANGELOG.md": "3ac97388c30c2bf567307bc4ca67a23d2937fb56d7591efdf5ca08e2da9c53af",
+    ".forensic_sitesaver/CHANGELOG.md": "ce7b8175a62e82a1f8e414879e4dd930f18322621bdd1adf6415391584975ffa",
     ".forensic_sitesaver/LICENSE_GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    ".forensic_sitesaver/LIZENZEN_UND_DRITTANBIETER.txt": "4edb0d871d2e60ae244a117e90a346d4504317125924f57d6c4d95f0f7700ff1",
-    ".forensic_sitesaver/__init__.py": "9bb0e0aff827d2cac00c2d1e7e447c5b3551285410de3c66b8787f7e0ac3e965",
+    ".forensic_sitesaver/LIZENZEN_UND_DRITTANBIETER.txt": "0134cdd605ae919d41d4087687b312b0c054e05025439b4e3445e3e8c014970a",
+    ".forensic_sitesaver/__init__.py": "2b80f7f8308454bf53f3a7e9bb94e9132cdda614b818852f28674280b788c0ff",
     ".forensic_sitesaver/capture.py": "29c998beeb8974f1f7a2fcb68ae44dd8f22b5a6f76d0d318337c693c7fa8ca68",
     ".forensic_sitesaver/cli.py": "7bc44926d7a874b86a84768551c4dcccee39a80be0cb4ccd1567d9fb99dd82bb",
-    ".forensic_sitesaver/common.py": "67c27b3c43fce1a67c4513f367494660478f1fe95ecd4f48ef048c2c0f013f32",
+    ".forensic_sitesaver/common.py": "b51e181a976791aba34857bebe04a0af4dc35011b684a5941e566a5bcd3cc1a3",
     ".forensic_sitesaver/domain_analysis.py": "ea0ef568f838309f31fbdcafff2419894cb714173a70d9f27d277fe4c3329eb2",
     ".forensic_sitesaver/gui.py": "decd2675e071a45731e89f5891137e22e91473ee1d6af03ab3aae8858d1c49ee",
     ".forensic_sitesaver/har_analysis.py": "6b6905d48d0fe689d8d6101098593745e2c1f502d9c2ed85fa168eca47ed64c3",
@@ -33,7 +33,7 @@
     ".forensic_sitesaver/tls_capture.py": "17308a5fef7d5cfc4d8e768d3ea345da9a5b3be43b6823d4520c5930166a1686",
     ".forensic_sitesaver/updater.py": "6589323fe1c0d378027353f25a2ef93684a2ddfb9b3357843c8006d4832698e8",
     ".forensic_sitesaver/website_mirror.py": "cb8e8971426981269162487e643c184f98e2e7eaca175d4d50abc59285468ced",
-    "README.md": "515c5bb8d7fec904ced367e650d8dc6ff9e07b299b328d8df790154fa969c8a6",
+    "README.md": "85855c69787bbf61c4a57e6a4e32a161791479c80143fa2d03a5dc628ba1cf60",
     "forensic_sitesaver.py": "196a4bfade9b951c469e8e0085330c0cb023fb3d595611ae3ee55b4ee3eb6612"
   }
 }
