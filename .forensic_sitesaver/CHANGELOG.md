@@ -1,6 +1,8 @@
 # Changelog
 
-## Noch nicht veröffentlicht
+## 1.1.1 – 12.10.2026
+
+Die Korrektur für unsichtbare Produktkarten und Inhaltsbereiche in der Offline-Ansicht wurde anhand der Sicherung von Großhandel Gold erfolgreich in der Praxis geprüft. Die nachfolgenden Änderungen seit Version 1.1.0 sind Bestandteil dieser Version.
 
 - Offline-Ansichten machen scrollabhängige `reveal`-Inhalte statisch sichtbar, ohne ausdrücklich versteckte Menüs oder Dialoge einzublenden. Neue Aufnahmen besuchen zusätzlich Reveal-Bereiche und sichern auslesbare Canvas-Grafiken als separate PNG-Momentaufnahmen mit SHA-256 und beobachteter Anzeigegröße. Die Ansicht dokumentiert sichtbare Reveal-Elemente, wiederhergestellte Canvas-Bilder und fehlende Canvas-Sicherungen; ursprünglicher DOM, HAR und vorhandene Primärdaten bleiben unverändert. Chromium-Regressionstests prüfen Produktkarten, Lazy-Bilder, Canvas-Charts und die Neuerstellung einer Ansicht.
 - Die zusätzlich eingefügten Untermenü-Pfeilknöpfe entfallen, damit die Offline-Ansicht das ursprüngliche Menü ohne zusätzliche Menüzeile darstellt. Maus, Touch und Tastatur bedienen die vorhandenen Menülinks und Schalter. Touch öffnet beim ersten Antippen das Untermenü und folgt beim zweiten dem Seitenziel; Pfeil nach unten/Leertaste öffnen das Untermenü per Tastatur, Enter folgt dem Link. Gesperrte Linkziele behalten ihren Hinweisdialog, ohne das Öffnen eines Untermenüs zu verhindern.
@@ -18,6 +20,7 @@
 - Gesicherte Lazy-Ziele ersetzen fehlende Platzhalter; nicht nutzbare `picture`-Quellen verdecken gesicherte Ersatzbilder nicht mehr.
 - `fehlende_referenzen.json` unterscheidet fehlende HAR-Einträge, fehlende Response-Inhalte, HTTP-Fehler, ausgebliebene Antworten, ungeeignete Inhaltstypen und nicht gesicherte Weiterleitungsziele.
 - Zusätzliche Chromium-Regressionstests prüfen die Aufnahme von Lazy-Bildern, CSS-Bildvarianten, Datei-/HTTP-Ansichten und unveränderte Quelldaten.
+- `unstable` dient als Testbranch für neue Änderungen; die Python-Syntaxprüfung läuft auch bei Aktualisierungen dieses Branches. Geprüfte Änderungen werden über einen Pull Request nach `main` übernommen.
 
 ## 1.1.0
 

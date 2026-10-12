@@ -1,4 +1,4 @@
-# Forensic SiteSaver 1.1.0
+# Forensic SiteSaver 1.1.1
 
 `Forensic SiteSaver` ist ein plattformübergreifendes Python-Werkzeug zur passiven technischen Sicherung und Auswertung öffentlich erreichbarer Websites und Domains. Die Software richtet sich insbesondere an forensische bzw. ermittlungsunterstützende Arbeitsabläufe, ist aber nicht auf Behördennutzung beschränkt.
 
@@ -161,4 +161,4 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 
 ## Öffentliche Version
 
-Aktueller Versionsstand: **1.1.0**. Die Änderungen gegenüber **1.0.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
+Aktueller Versionsstand: **1.1.1**. Die Änderungen gegenüber **1.1.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
