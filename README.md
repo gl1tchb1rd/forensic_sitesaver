@@ -28,6 +28,13 @@ python3 forensic_sitesaver.py
 
 Beim ersten Start wird im technischen Unterordner eine lokale `.venv` angelegt. Python-Abhängigkeiten sowie Chromium und Firefox werden von ihren jeweiligen Quellen installiert. Python 3.10+ und Tk/Tkinter müssen systemseitig vorhanden sein.
 
+## Freigegebener Stand und Teststand
+
+- `main` enthält den freigegebenen Programmstand.
+- `unstable` enthält Änderungen zum Ausprobieren. Wenn die automatischen Prüfungen und die praktische Prüfung passen, werden die Änderungen über einen Pull Request nach `main` übernommen.
+
+Den [aktuellen Teststand als ZIP herunterladen](https://github.com/gl1tchb1rd/forensic_sitesaver/archive/refs/heads/unstable.zip), in einen eigenen Programmordner entpacken und `forensic_sitesaver.py` starten. Der technische Unterordner `.forensic_sitesaver` muss mit entpackt werden. Die vorhandene Programminstallation kann zum Vergleich bestehen bleiben. Der [freigegebene Stand](https://github.com/gl1tchb1rd/forensic_sitesaver/archive/refs/heads/main.zip) ist weiterhin separat verfügbar.
+
 ## Funktionen
 
 - passive Website-Sicherung mit Playwright
@@ -77,7 +84,11 @@ Die gesamte Vorschauerstellung basiert auf dem übernommenen Spiegelmodul aus **
 
 Die Ansicht erhält eingebettete Bilder (`data:`), aufgezeichnete SVG-Bilder, lokale Bildvarianten aus `srcset`/`picture`, Sprungmarken und Verweise zwischen gesicherten Seiten. Bei neuen Sicherungen werden die vom Browser ausgewählten Bildquellen zusätzlich in der Seitenliste dokumentiert; der originale DOM bleibt unverändert. CSS-Importe und Bildreferenzen verwenden lokale Laufzeitkopien. Die Ansicht kann per Doppelklick auf `02_website/index.html` oder über einen lokalen statischen Webserver geöffnet werden.
 
-Bei neuen Sicherungen scrollt der Browser während der HAR-Aufzeichnung zu noch nicht geladenen Lazy-Bildern, damit auch Bilder unterhalb des sichtbaren Ausschnitts angefordert werden können. Der Vorgang besucht höchstens 40 Bildpositionen und dauert höchstens acht Sekunden beziehungsweise das eingestellte Zeitlimit; anschließend wird die ursprüngliche Scrollposition wiederhergestellt. Der danach beobachtete DOM wird gespeichert, ohne Bildattribute künstlich zu ändern. `lazy_image_loading` in `04_metadaten/visited_pages.json` dokumentiert das Ergebnis und erreichte Grenzen.
+Bei neuen Sicherungen scrollt der Browser während der HAR-Aufzeichnung zu noch nicht geladenen Lazy-Bildern und zu Inhaltsbereichen mit der Klasse `reveal`, damit auch Bilder und Einblendungen unterhalb des sichtbaren Ausschnitts erfasst werden können. Der Vorgang besucht höchstens 40 Positionen und dauert höchstens acht Sekunden beziehungsweise das eingestellte Zeitlimit; anschließend wird die ursprüngliche Scrollposition wiederhergestellt. Der danach beobachtete DOM wird gespeichert, ohne Bildattribute künstlich zu ändern. `lazy_image_loading` in `04_metadaten/visited_pages.json` dokumentiert das Ergebnis und erreichte Grenzen.
+
+Die abgeleitete Offline-Ansicht zeigt `reveal`-Elemente statisch an, weil die ursprünglichen Einblendungsskripte entfernt werden. Ausdrücklich per `hidden` oder `aria-hidden="true"` versteckte Elemente bleiben unberührt. Das behebt insbesondere leere Produktkarten und Inhaltsbereiche, deren Texte und Bilder bereits gesichert sind. Die Anpassung wirkt auch bei „Ansicht aus Sicherung neu erzeugen“; `static_visuals` im `website_manifest.json` dokumentiert ihren Umfang.
+
+Canvas-Grafiken, etwa per JavaScript gezeichnete Kurscharts, enthalten ihre Bildpunkte nicht im HTML oder HAR. Neue Aufnahmen speichern auslesbare Canvas-Pixel separat als PNG unter `02_website/_canvas_roh/`; Pfad, Größe und SHA-256 stehen in `canvas_snapshots` der Seitenliste. Die Offline-Ansicht bindet diese Momentaufnahme als statisches Bild mit der beobachteten Anzeigegröße ein. Die Erfassung ist auf 40 Canvas-Elemente und insgesamt 16 Millionen Pixel je Seite begrenzt; nicht auslesbare oder leere Canvas-Flächen werden in der Seitenliste gekennzeichnet. Fehlende Canvas-Sicherungen werden im Ansichtsmanifest gezählt. Eine alte Sicherung ohne diese Pixel kann den Chart nicht nachträglich aus dem DOM rekonstruieren. Animationen und Live-Kursaktualisierungen werden nicht wiedergegeben.
 
 Die lokale Zuordnung berücksichtigt URL-kodierte Umlaute und Leerzeichen, maskierte CSS-Dateinamen und `image-set(...)`. Relative Verweise in weitergeleiteten Stylesheets verwenden die endgültige Stylesheet-Adresse. Ein nicht gesicherter Lazy-Platzhalter kann durch sein bereits aufgezeichnetes Ziel ersetzt werden; unbrauchbare `picture`-Quellen verdecken das gesicherte Ersatzbild nicht mehr.
 
