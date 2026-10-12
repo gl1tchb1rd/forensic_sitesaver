@@ -33,6 +33,7 @@ from mirror_support import (_resource_key, _har_body, _safe_resource_mime,
 from offline_menu import MENU_SCRIPT_HASH, PREFIX as MENU_PREFIX, prepare_offline_menus, append_menu_script
 from offline_links import (LINK_SCRIPT_HASH, clear_link_annotations, annotate_inactive_link,
                            add_image_map_info_buttons, append_link_inspector)
+from offline_visuals import canvas_sources, prepare_static_visuals
 
 WEBSITE_CSP = (
     "default-src 'none'; "
@@ -330,7 +331,7 @@ def _page_filename(item: dict[str, Any]) -> str:
 
 
 def _localize_html(
-    raw_html: str, page_url: str, resource_map: dict[str, dict[str, Any]], page_link_map: dict[str, str], *, page_name: str = "", selected_images: list[str] | None = None,
+    raw_html: str, page_url: str, resource_map: dict[str, dict[str, Any]], page_link_map: dict[str, str], *, page_name: str = "", selected_images: list[str] | None = None, canvases: dict[int, dict[str, Any]] | None = None, visual_result: dict[str, int] | None = None,
 ) -> str:
     soup = BeautifulSoup(raw_html, "html.parser")
     original_page_url = page_url
@@ -352,6 +353,9 @@ def _localize_html(
             if picture:
                 for source in list(picture.find_all("source")):
                     source.decompose()
+    visuals = prepare_static_visuals(soup, canvases or {})
+    if visual_result is not None:
+        visual_result.update(visuals)
     for img in soup.find_all("img"):
         src = str(img.get("src") or "")
         if not src or src.lower().startswith("data:") or _canon_resource_url(urljoin(page_url, src)) not in resource_map:
@@ -625,7 +629,9 @@ def build_website_mirror(
             all_issues.append({"index": idx, "issues": ["DOM-Rohdatei fehlt"]})
             continue
         page_url = str(item.get("final_url") or item.get("requested_url") or "")
-        localized = _localize_html(raw_path.read_text(encoding="utf-8", errors="replace"), page_url, resource_map, page_link_map, page_name=filenames[idx], selected_images=item.get("image_sources"))
+        visuals = {}
+        localized = _localize_html(raw_path.read_text(encoding="utf-8", errors="replace"), page_url, resource_map, page_link_map, page_name=filenames[idx], selected_images=item.get("image_sources"),
+                                   canvases=canvas_sources(case_root, item.get("canvas_snapshots") or []), visual_result=visuals)
         out = pages_dir / filenames[idx]
         out.write_text(localized, encoding="utf-8", newline="\n")
         issues = _verify_local_html(out)
@@ -638,6 +644,7 @@ def build_website_mirror(
             "sha256": sha256_file(out),
             "verification": "PASS" if not issues else "FAIL",
             "issues": issues,
+            "static_visuals": visuals,
         }
         page_records.append(rec)
         if issues:
@@ -681,6 +688,7 @@ def build_website_mirror(
             "css": "Original-CSS bytegetreu gesichert; separate kleine Laufzeitkopie für lokale URL-Umschreibung",
             "scripts": "Originalskripte entfernt; eigene Menü- und Linkcontroller ausschließlich per CSP-Hash freigegeben",
             "svg": "bytegetreu gesichert und ausschließlich als passive Bilder eingebunden",
+            "static_visuals": "Reveal-Elemente statisch sichtbar; separat gesicherte Canvas-Pixel als PNG-Bilder; fehlende Canvas-Sicherungen werden gezählt",
         },
     }
     (website_dir / "website_manifest.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -702,6 +710,7 @@ def build_website_mirror(
         "- Online-Links werden blockiert; lokale Archivseiten und lokale Ressourcen bleiben verlinkt",
         "- CSP sperrt Netzwerkzugriffe zusätzlich auf Browser-Ebene",
         "- SVG wird bytegetreu gesichert und ausschließlich als passives Bild gerendert",
+        "- Reveal-Inhalte sind statisch sichtbar; separat gesicherte Canvas-Pixel werden als PNG-Momentaufnahmen angezeigt",
     ]
     if all_issues:
         summary += ["", "Festgestellte Probleme:"]

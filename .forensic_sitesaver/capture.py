@@ -28,6 +28,7 @@ from har_analysis import analyze_har
 from tls_capture import capture_tls
 from reports import export_reports, write_capture_report
 from website_mirror import build_local_mirror
+from offline_visuals import capture_canvases
 # Keep the old imports available for existing callers and regression tests.
 from mirror_support import _har_body, _rewrite_css, _url_without_fragment
 
@@ -61,8 +62,11 @@ def _load_lazy_images(page: Any, timeout_ms: int) -> dict[str, Any]:
                 (image.loading === 'lazy' && !image.naturalWidth) ||
                 ['data-src', 'data-lazy-src', 'data-original', 'data-srcset'].some(name => image.hasAttribute(name)));
             const initiallyLoaded = new Set(candidates.filter(image => image.naturalWidth > 0));
-            const positions = [...new Set(candidates.filter(image => image.getClientRects().length)
-                .map(image => Math.max(0, image.getBoundingClientRect().top + scrollY - innerHeight / 2)))];
+            const reveals = Array.from(document.querySelectorAll('.reveal')).filter(element =>
+                !element.hidden && element.getClientRects().length);
+            const positions = [...new Set([...candidates, ...reveals]
+                .filter(element => element.getClientRects().length)
+                .map(element => Math.max(0, element.getBoundingClientRect().top + scrollY - innerHeight / 2)))];
             let visited = 0;
             const pause = () => new Promise(resolve => setTimeout(resolve, Math.min(120, Math.max(0, deadline - performance.now()))));
             try {
@@ -80,7 +84,7 @@ def _load_lazy_images(page: Any, timeout_ms: int) -> dict[str, Any]:
                     await new Promise(resolve => setTimeout(resolve, 120));
                 }
             }
-            return {candidate_images: candidates.length, positions_visited: visited,
+            return {candidate_images: candidates.length, reveal_elements: reveals.length, positions_visited: visited,
                 loaded_images: candidates.filter(image => image.naturalWidth > 0 && !initiallyLoaded.has(image)).length,
                 limited: visited < positions.length || candidates.some(image => !image.complete)};
         }''', max(0, min(timeout_ms, 8000)))
@@ -270,6 +274,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                     ensure_dir(raw_dom.parent)
                     raw_dom.write_text(page.content(), encoding="utf-8", newline="\n")
                     image_sources = _image_sources(page)
+                    canvas_snapshots = capture_canvases(page, case_root, index)
                     screenshot_name = f"{Path(html_name).stem}.png"
                     screenshot_file = dirs["03_screenshots"] / screenshot_name
                     try:
@@ -284,6 +289,7 @@ def capture_website(start_url: str, output_root: Path, *, browser_name: str = "c
                         "raw_dom_relative": raw_dom.relative_to(case_root).as_posix(),
                         "image_sources": image_sources,
                         "lazy_image_loading": lazy_image_loading,
+                        "canvas_snapshots": canvas_snapshots,
                         "screenshot": f"03_screenshots/{screenshot_name}",
                     }
                     visited.append(item)
