@@ -14,6 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from common import APP_NAME, APP_VERSION, DISCLAIMER, REPOSITORY_URL
+from release_updates import ReleaseInfo, check_latest_release
 
 TECH_DIR = Path(__file__).resolve().parent
 PUBLIC_ROOT = TECH_DIR.parent
@@ -98,6 +99,8 @@ class App(tk.Tk):
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.runner = Runner(self)
         self.last_result: Path | None = None
+        self.release_check_running = False
+        self.latest_release: ReleaseInfo | None = None
         self._style()
         self._header()
         self._tabs()
@@ -105,6 +108,7 @@ class App(tk.Tk):
         self._status()
         self.after(100, self._poll)
         self.protocol("WM_DELETE_WINDOW", self._close)
+        self.after(1000, lambda: self.check_program_updates(manual=False))
 
     def _style(self) -> None:
         s = ttk.Style(self)
@@ -192,10 +196,102 @@ class App(tk.Tk):
 
     def _update_tab(self):
         f=self.t_update
-        ttk.Label(f,text="Updates betreffen ausschließlich freigegebene Python-Abhängigkeiten und Playwright-Browser. Der Programmcode aktualisiert sich nicht selbst.",wraplength=900).grid(row=0,column=0,columnspan=3,sticky="w",pady=(0,10))
-        ttk.Button(f,text="Auf Paketupdates prüfen",command=lambda:self.runner.start(["update","--check-only"],"Update-Prüfung")).grid(row=1,column=0,sticky="w")
-        ttk.Button(f,text="Abhängigkeiten aktualisieren …",command=self.start_update).grid(row=1,column=1,sticky="w",padx=8)
-        ttk.Button(f,text="Installierte Lizenzen neu erfassen",command=lambda:self.runner.start(["licenses"],"Lizenzinventar aktualisieren")).grid(row=1,column=2,sticky="w")
+        program = ttk.LabelFrame(f, text="Programmversion", padding=10, style="Section.TLabelframe")
+        program.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0,12))
+        ttk.Label(program,text=f"Installiert: {APP_VERSION}. Beim Start wird im Hintergrund nach einem neuen GitHub-Release gesucht.",wraplength=900).grid(row=0,column=0,columnspan=3,sticky="w")
+        self.release_status = tk.StringVar(value="Noch nicht geprüft.")
+        ttk.Label(program,textvariable=self.release_status,wraplength=900).grid(row=1,column=0,columnspan=3,sticky="w",pady=8)
+        self.release_check_button = ttk.Button(program,text="Nach Updates suchen",command=self.check_program_updates)
+        self.release_check_button.grid(row=2,column=0,sticky="w")
+        self.release_download_button = ttk.Button(program,text="Update herunterladen",state="disabled",command=self.download_program_update)
+        self.release_download_button.grid(row=2,column=1,sticky="w",padx=8)
+        self.release_notes_button = ttk.Button(program,text="Release Notes anzeigen",state="disabled",command=self.show_release_notes)
+        self.release_notes_button.grid(row=2,column=2,sticky="w")
+        ttk.Label(program,text="Der Download öffnet das Quellcode-ZIP im Browser. ZIP vollständig entpacken, einschließlich .forensic_sitesaver, und die neue Version manuell starten.",wraplength=900,style="Hint.TLabel").grid(row=3,column=0,columnspan=3,sticky="w",pady=(8,0))
+        ttk.Label(f,text="Python-Abhängigkeiten und Playwright-Browser",style="Section.TLabelframe.Label").grid(row=1,column=0,columnspan=3,sticky="w",pady=(0,8))
+        ttk.Button(f,text="Auf Paketupdates prüfen",command=lambda:self.runner.start(["update","--check-only"],"Paketupdate-Prüfung")).grid(row=2,column=0,sticky="w")
+        ttk.Button(f,text="Abhängigkeiten aktualisieren …",command=self.start_update).grid(row=2,column=1,sticky="w",padx=8)
+        ttk.Button(f,text="Installierte Lizenzen neu erfassen",command=lambda:self.runner.start(["licenses"],"Lizenzinventar aktualisieren")).grid(row=2,column=2,sticky="w")
+
+    def check_program_updates(self, manual=True):
+        if self.release_check_running:
+            return
+        self.release_check_running = True
+        self.latest_release = None
+        self.release_check_button.config(state="disabled")
+        self.release_download_button.config(state="disabled")
+        self.release_notes_button.config(state="disabled")
+        self.release_status.set("GitHub-Releases werden geprüft …")
+
+        def worker():
+            try:
+                release = check_latest_release()
+                self.events.put(("release_checked", (manual, release, None)))
+            except Exception as exc:
+                self.events.put(("release_checked", (manual, None, str(exc))))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _release_checked(self, manual, release, error):
+        self.release_check_running = False
+        self.release_check_button.config(state="normal")
+        self.latest_release = release
+        if error:
+            self.release_status.set(f"Updateprüfung fehlgeschlagen: {error}")
+            if manual:
+                messagebox.showerror("Updateprüfung fehlgeschlagen",error,parent=self)
+            return
+        if release is None:
+            text = "Auf GitHub ist noch kein freigegebenes Release verfügbar."
+        elif not release.update_available:
+            self.release_notes_button.config(state="normal")
+            text = f"Du verwendest die aktuelle Version ({APP_VERSION}). GitHub-Release: {release.tag}."
+        else:
+            self.release_status.set(f"Update verfügbar: {release.tag}. Installiert: {APP_VERSION}.")
+            self.release_download_button.config(state="normal")
+            self.release_notes_button.config(state="normal")
+            self._show_update_dialog(release)
+            return
+        self.release_status.set(text)
+        if manual:
+            messagebox.showinfo("Updateprüfung",text,parent=self)
+
+    def _open_release_url(self, url):
+        try:
+            if not webbrowser.open(url):
+                raise RuntimeError("Der Browser konnte nicht geöffnet werden.")
+        except Exception as exc:
+            messagebox.showerror("Öffnen fehlgeschlagen",f"{exc}\n\nAdresse: {url}",parent=self)
+
+    def download_program_update(self):
+        if self.latest_release and self.latest_release.update_available:
+            self._open_release_url(self.latest_release.download_url)
+
+    def show_release_notes(self):
+        if self.latest_release:
+            self._open_release_url(self.latest_release.release_url)
+
+    def _show_update_dialog(self, release):
+        dialog = tk.Toplevel(self)
+        dialog.title("Update verfügbar")
+        dialog.transient(self)
+        dialog.geometry("620x420")
+        dialog.minsize(500,320)
+        frame = ttk.Frame(dialog,padding=14)
+        frame.pack(fill="both",expand=True)
+        ttk.Label(frame,text=f"Version {release.tag} ist verfügbar. Installiert ist {APP_VERSION}.",wraplength=570).pack(anchor="w")
+        notes = ScrolledText(frame,wrap="word",height=10)
+        notes.pack(fill="both",expand=True,pady=12)
+        notes.insert("1.0",release.notes)
+        notes.config(state="disabled")
+        ttk.Label(frame,text="ZIP herunterladen, vollständig entpacken und die neue Version manuell starten.",wraplength=570).pack(anchor="w",pady=(0,10))
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x")
+        ttk.Button(buttons,text="Release Notes anzeigen",command=lambda:self._open_release_url(release.release_url)).pack(side="left")
+        ttk.Button(buttons,text="Update herunterladen",command=lambda:self._open_release_url(release.download_url)).pack(side="left",padx=8)
+        later = ttk.Button(buttons,text="Später",command=dialog.destroy)
+        later.pack(side="right")
+        dialog.bind("<Escape>",lambda event:dialog.destroy())
+        later.focus_set()
 
     def _about_tab(self):
         f=self.t_about
@@ -233,6 +329,7 @@ class App(tk.Tk):
                 kind,payload=self.events.get_nowait()
                 if kind=="log":self.append_log(str(payload))
                 elif kind=="result":self.last_result=Path(str(payload)); self.status.set("Ergebnis verfügbar")
+                elif kind=="release_checked":self._release_checked(*payload)
                 elif kind=="done":
                     rc,stopped=payload; self.set_running(False)
                     if stopped:self.status.set("Abgebrochen");self.append_log("\nVorgang abgebrochen.\n")

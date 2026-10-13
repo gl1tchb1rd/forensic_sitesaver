@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 – 13.10.2026
+
+### Programmupdates
+
+- SiteSaver prüft beim Start im Hintergrund das neueste freigegebene GitHub-Release. **Ein Dialog erscheint ausschließlich bei einer neueren Version.** Bei aktuellem Versionsstand, fehlendem Release oder Verbindungsfehler erscheint beim Start keine Meldung zum Wegklicken.
+- Im Reiter „Updates“ gibt es zusätzlich **„Nach Updates suchen“**. Nur die manuelle Prüfung zeigt auch den aktuellen Versionsstand, fehlende Releases und Verbindungsfehler als Dialog an. Der Prüfstatus ist im Reiter sichtbar.
+- Versionsnummern werden nach Semantic Versioning verglichen; GitHub-Tags mit führendem `v` oder `V` werden erkannt. `v1.2.0` und die Programmversion `1.2.0` gelten als gleich. Entwürfe und Vorabversionen werden nicht angeboten.
+- Ein Updatehinweis enthält Release Notes, **„Update herunterladen“** und **„Später“**. Der Download öffnet das Quellcode-ZIP des konkreten Release-Tags im Browser; Entpacken und Installation erfolgen manuell. Python-Abhängigkeits- und Playwright-Browserupdates bleiben separat verfügbar.
+- GitHub-Abfragen laufen in einem Hintergrundthread mit Verbindungszeitlimit. Die Benutzeroberfläche bleibt bedienbar, und Verbindungsfehler unterbrechen den Programmstart nicht. Die Updateprüfung überträgt keine Sicherungs- oder Analysedaten.
+
+### Releasepflege und Prüfung
+
+- Versionsangaben in Programm, README und Lizenzhinweisen auf **1.2.0** gesetzt; Paketprüfsummen aktualisiert und Release Notes mit allen Änderungen seit **1.1.0** ergänzt.
+- Regressionstests prüfen Versionsvergleich, führendes `v`, fehlende Releases, API-Fehler, Offline-/Timeout-Verhalten und GUI-Updatehinweise einschließlich der stillen automatischen Prüfung ohne Update.
+
+Version 1.2.0 enthält außerdem sämtliche Korrekturen der Version 1.1.1, insbesondere sichtbare Reveal-Inhalte und Canvas-Momentaufnahmen, verbesserte Bild-/HAR-Verarbeitung und die überarbeitete Offline-Menübedienung. Die einzelnen Änderungen seit 1.1.0 sind im folgenden Abschnitt dokumentiert.
+
 ## 1.1.1 – 12.10.2026
 
 Die Korrektur für unsichtbare Produktkarten und Inhaltsbereiche in der Offline-Ansicht wurde anhand der Sicherung von Großhandel Gold erfolgreich in der Praxis geprüft. Die nachfolgenden Änderungen seit Version 1.1.0 sind Bestandteil dieser Version.
