@@ -1,4 +1,4 @@
-# Forensic SiteSaver 1.1.1
+# Forensic SiteSaver 1.2.0
 
 `Forensic SiteSaver` ist ein plattformübergreifendes Python-Werkzeug zur passiven technischen Sicherung und Auswertung öffentlich erreichbarer Websites und Domains. Die Software richtet sich insbesondere an forensische bzw. ermittlungsunterstützende Arbeitsabläufe, ist aber nicht auf Behördennutzung beschränkt.
 
@@ -54,7 +54,16 @@ Den [aktuellen Teststand als ZIP herunterladen](https://github.com/gl1tchb1rd/fo
 - TLS-/SSL-Zertifikatssicherung
 - automatische PDF-Aktenberichte im jeweiligen Ergebnisordner unter `PDF-Berichte/`; bei Vollsicherungen für Sicherungsvermerk, HAR-Auswertung, Domainanalyse und TLS-Bericht, bei Domainanalysen für die Domainanalyse
 - SHA-256-Prüfsummen und Transparenzdateien zu externen Diensten/Datenquellen
-- Updateprüfung für Abhängigkeiten (keine stille Selbstaktualisierung des Programmcodes)
+- GitHub-Release-Prüfung beim Start und über „Nach Updates suchen“, mit Release Notes und ZIP-Download
+- separate Updateprüfung für Abhängigkeiten (keine stille Selbstaktualisierung des Programmcodes)
+
+## Programmupdates
+
+Beim Start prüft SiteSaver im Hintergrund das neueste freigegebene GitHub-Release. Im Reiter **„Updates“** lässt sich die Prüfung mit **„Nach Updates suchen“** wiederholen. Die Versionsnummer des Release-Tags (z. B. `v1.2.0`) wird nach Semantic Versioning mit der installierten Version verglichen; Entwürfe und Vorabversionen werden nicht angeboten. Ein neuerer Release zeigt einen Hinweis mit Release Notes, **„Update herunterladen“** und **„Später“**.
+
+Der Download-Button öffnet das Quellcode-ZIP des konkreten Release-Tags im Standardbrowser. Das ZIP in einen eigenen Programmordner vollständig entpacken, einschließlich `.forensic_sitesaver`, und anschließend dessen `forensic_sitesaver.py` starten. Sicherungen bleiben in ihren bisherigen Ordnern; sie können aus der neuen Version geöffnet werden. Der Download ersetzt keine laufende Installation. Die Abhängigkeitsupdates bleiben separat verfügbar.
+
+Die Prüfung nutzt die öffentliche GitHub-API ohne Zugangstoken und hat ein Verbindungszeitlimit von zehn Sekunden. Ohne Internet startet das Programm normal weiter; automatische Prüfungen zeigen bei Fehlern keinen Dialog. Der Prüfstatus steht im Reiter „Updates“. Manuelle Prüfungen zeigen auch Verbindungsfehler und den aktuellen Versionsstand an. Ohne veröffentlichtes GitHub-Release wird kein Programmupdate angeboten; Änderungen auf `main` oder `unstable` allein lösen keinen Hinweis aus.
 
 ## Ergebnisordner und PDF-Berichte
 
@@ -136,6 +145,8 @@ Es gibt **keine KI-Anbindung und keine Cloud-Analyse**. HAR-Dateien, Screenshots
 
 Für technische Infrastrukturinformationen können je nach Analyse DNS-Resolver, RDAP/WHOIS, `ipwho.is` und Team Cymru angesprochen werden. Jeder konkrete Analyselauf dokumentiert Dienst/Ziel, übertragenen Wert und Zweck in Transparenzdateien.
 
+Die Programmupdateprüfung kontaktiert beim Start und bei manueller Prüfung `api.github.com` für öffentliche Release-Metadaten. GitHub erhält dabei die üblichen Verbindungsdaten und den User-Agent mit der Programmversion; Sicherungs- und Analysedaten werden nicht übertragen. Release- und Download-Links werden erst nach einem Klick im Browser geöffnet.
+
 ## Lizenz
 
 Der eigene Programmcode wird unter **GNU General Public License Version 3 oder später (`GPL-3.0-or-later`)** veröffentlicht. Die GPL erlaubt nach ihren Bedingungen private, wissenschaftliche, behördliche und kommerzielle Nutzung sowie Änderung und Weitergabe.
@@ -161,4 +172,4 @@ Dieses Werkzeug dient ausschließlich der technischen Ermittlungsunterstützung 
 
 ## Öffentliche Version
 
-Aktueller Versionsstand: **1.1.1**. Die Änderungen gegenüber **1.1.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
+Aktueller Versionsstand: **1.2.0** (GitHub-Release-Tag: `v1.2.0`). Die Änderungen gegenüber **1.1.0** sind in `.forensic_sitesaver/CHANGELOG.md` dokumentiert und in `.forensic_sitesaver/RELEASE_NOTES_1.2.0.md` zusammengefasst. Frühere interne Entwicklungsstände sind nicht Teil des öffentlichen Changelogs.
